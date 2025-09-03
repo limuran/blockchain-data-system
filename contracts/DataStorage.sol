@@ -4,10 +4,11 @@ pragma solidity ^0.8.19;
 contract DataStorage {
     struct DataEntry {
         address user;
-        string data;
+        string data;  // 改为支持任意字符串，而非JSON
         uint256 timestamp;
         string dataType;
         uint256 blockNumber;
+        bytes32 dataHash;  // 新增数据哈希用于快速查找
     }
     
     // 存储所有数据条目
@@ -19,14 +20,27 @@ contract DataStorage {
     // 数据类型计数
     mapping(string => uint256) public dataTypeCount;
     
-    // 事件定义 - 用于 The Graph 索引
+    // 数据哈希到ID的映射
+    mapping(bytes32 => uint256) public dataHashToId;
+    
+    // 管理员地址
+    address public owner;
+    
+    // 构造函数 - 解决Instructor缺失问题
+    constructor() {
+        owner = msg.sender;
+        emit ContractDeployed(msg.sender, block.timestamp, block.number);
+    }
+    
+    // 事件定义 - 用于 The Graph 索引和日志查询
     event DataStored(
         address indexed user,
-        string data,
+        string data,  // 任意字符串数据
         uint256 timestamp,
-        string dataType,
+        string indexed dataType,
         uint256 indexed entryId,
-        uint256 blockNumber
+        uint256 blockNumber,
+        bytes32 dataHash
     );
     
     event UserFirstData(
@@ -34,23 +48,42 @@ contract DataStorage {
         uint256 timestamp
     );
     
-    // 存储数据函数
+    event ContractDeployed(
+        address indexed deployer,
+        uint256 timestamp,
+        uint256 blockNumber
+    );
+    
+    event DataQueried(
+        address indexed querier,
+        string queryType,
+        uint256 resultCount,
+        uint256 timestamp
+    );
+    
+    // 存储数据函数 - 支持任意字符串
     function storeData(string memory _data, string memory _dataType) public {
+        require(bytes(_data).length > 0, "Data cannot be empty");
+        require(bytes(_dataType).length > 0, "Data type cannot be empty");
+        
         bool isFirstData = userDataCount[msg.sender] == 0;
+        bytes32 dataHash = keccak256(abi.encodePacked(_data, msg.sender, block.timestamp));
         
         DataEntry memory newEntry = DataEntry({
             user: msg.sender,
-            data: _data,
+            data: _data,  // 直接存储任意字符串
             timestamp: block.timestamp,
             dataType: _dataType,
-            blockNumber: block.number
+            blockNumber: block.number,
+            dataHash: dataHash
         });
         
         dataEntries.push(newEntry);
+        uint256 entryId = dataEntries.length - 1;
+        
         userDataCount[msg.sender]++;
         dataTypeCount[_dataType]++;
-        
-        uint256 entryId = dataEntries.length - 1;
+        dataHashToId[dataHash] = entryId;
         
         emit DataStored(
             msg.sender,
@@ -58,23 +91,12 @@ contract DataStorage {
             block.timestamp,
             _dataType,
             entryId,
-            block.number
+            block.number,
+            dataHash
         );
         
         if (isFirstData) {
             emit UserFirstData(msg.sender, block.timestamp);
-        }
-    }
-    
-    // 批量存储数据
-    function storeMultipleData(
-        string[] memory _dataArray, 
-        string[] memory _dataTypes
-    ) public {
-        require(_dataArray.length == _dataTypes.length, "Arrays length mismatch");
-        
-        for (uint256 i = 0; i < _dataArray.length; i++) {
-            storeData(_dataArray[i], _dataTypes[i]);
         }
     }
     
@@ -129,6 +151,14 @@ contract DataStorage {
         return typeEntries;
     }
     
+    // 通过哈希查找数据
+    function getDataByHash(bytes32 _dataHash) public view returns (DataEntry memory) {
+        uint256 entryId = dataHashToId[_dataHash];
+        require(entryId < dataEntries.length, "Data not found");
+        
+        return dataEntries[entryId];
+    }
+    
     // 获取统计信息
     function getStats() public view returns (
         uint256 totalEntries,
@@ -137,7 +167,6 @@ contract DataStorage {
     ) {
         totalEntries = dataEntries.length;
         
-        // 计算唯一用户数
         address[] memory uniqueUsers = new address[](totalEntries);
         uint256 userCount = 0;
         
