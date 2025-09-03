@@ -18,7 +18,7 @@ const TransactionTable = ({ data, onClose }) => {
   };
 
   const formatData = (data, maxLength = 30) => {
-    if (!data) return 'N/A';
+    if (!data || data === 'N/A') return '无数据';
     if (data.length <= maxLength) return data;
     return data.slice(0, maxLength) + '...';
   };
@@ -55,7 +55,7 @@ const TransactionTable = ({ data, onClose }) => {
           <td className="px-4 py-3 text-sm">
             <div className="flex items-center gap-2">
               <span>{formatData(item.data)}</span>
-              {item.data && (
+              {item.data && item.data !== '无数据' && (
                 <button
                   onClick={() => setExpandedRow(expandedRow === index ? null : index)}
                   className="text-blue-500"
