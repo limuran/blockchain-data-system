@@ -1,0 +1,54 @@
+{
+  "name": "blockchain-data-system",
+  "version": "1.0.0",
+  "description": "完整的区块链数据上链系统",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy-complete.js",
+    "deploy:sepolia": "hardhat run scripts/deploy-complete.js --network sepolia",
+    "deploy:goerli": "hardhat run scripts/deploy-complete.js --network goerli",
+    "verify": "hardhat run scripts/verify-contract.js --network sepolia",
+    "interact": "hardhat run scripts/interact.js --network sepolia",
+    "monitor": "hardhat run scripts/monitor.js --network sepolia",
+    "coverage": "hardhat coverage",
+    "gas-report": "REPORT_GAS=true hardhat test",
+    "subgraph:codegen": "cd subgraph && graph codegen",
+    "subgraph:build": "cd subgraph && graph build",
+    "subgraph:deploy": "cd subgraph && graph deploy --studio usdt-data-tracker",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:serve": "cd frontend && npm run serve",
+    "clean": "hardhat clean && rm -rf deployments/* frontend-config.json subgraph-generated.yaml"
+  },
+  "dependencies": {
+    "ethers": "^5.7.2",
+    "bignumber.js": "^9.1.2",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
+    "@typechain/ethers-v5": "^11.1.2",
+    "@typechain/hardhat": "^9.1.0",
+    "chai": "^4.3.10",
+    "hardhat": "^2.19.0",
+    "hardhat-gas-reporter": "^1.0.9",
+    "solidity-coverage": "^0.8.5",
+    "typechain": "^8.3.2"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "smart-contract",
+    "data-storage",
+    "the-graph",
+    "defi",
+    "web3"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
