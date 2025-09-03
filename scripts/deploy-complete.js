@@ -1,4 +1,4 @@
-// scripts/deploy-complete.js - 完整部署脚本
+// scripts/deploy-complete.js - 完整部署脚本 (Ethers v6)
 const { ethers } = require('hardhat');
 const fs = require('fs');
 const path = require('path');
@@ -9,22 +9,25 @@ async function main() {
   // 获取部署者账户
   const [deployer] = await ethers.getSigners();
   console.log("📝 部署账户:", deployer.address);
-  console.log("💰 账户余额:", ethers.utils.formatEther(await deployer.getBalance()), "ETH");
+  console.log("💰 账户余额:", ethers.formatEther(await deployer.provider.getBalance(deployer.address)), "ETH");
 
   // 1. 部署数据存储合约
   console.log("\n📦 部署数据存储合约...");
   const DataStorage = await ethers.getContractFactory("DataStorage");
   const dataStorage = await DataStorage.deploy();
-  await dataStorage.deployed();
+  await dataStorage.waitForDeployment();
+  
+  const contractAddress = await dataStorage.getAddress();
+  const deployTransaction = dataStorage.deploymentTransaction();
   
   console.log("✅ DataStorage 合约部署成功!");
-  console.log("📍 合约地址:", dataStorage.address);
-  console.log("🔗 部署交易:", dataStorage.deployTransaction.hash);
-  console.log("🏗️ 部署区块:", dataStorage.deployTransaction.blockNumber);
+  console.log("📍 合约地址:", contractAddress);
+  console.log("🔗 部署交易:", deployTransaction.hash);
+  console.log("🏗️ 部署区块:", deployTransaction.blockNumber);
 
   // 2. 等待确认
   console.log("\n⏳ 等待区块确认...");
-  await dataStorage.deployTransaction.wait(3);
+  await deployTransaction.wait(3);
 
   // 3. 写入测试数据
   console.log("\n📝 写入测试数据...");
@@ -57,12 +60,12 @@ async function main() {
   // 5. 保存部署信息
   const deploymentInfo = {
     network: hre.network.name,
-    contractAddress: dataStorage.address,
-    deploymentBlock: dataStorage.deployTransaction.blockNumber,
-    deploymentHash: dataStorage.deployTransaction.hash,
+    contractAddress: contractAddress,
+    deploymentBlock: deployTransaction.blockNumber,
+    deploymentHash: deployTransaction.hash,
     deployer: deployer.address,
     timestamp: new Date().toISOString(),
-    gasUsed: dataStorage.deployTransaction.gasLimit?.toString(),
+    gasUsed: deployTransaction.gasLimit?.toString(),
     testDataCount: testData.length
   };
 
@@ -78,9 +81,9 @@ async function main() {
 
   // 6. 生成前端配置
   const frontendConfig = {
-    CONTRACT_ADDRESS: dataStorage.address,
+    CONTRACT_ADDRESS: contractAddress,
     NETWORK_NAME: hre.network.name,
-    DEPLOYMENT_BLOCK: dataStorage.deployTransaction.blockNumber,
+    DEPLOYMENT_BLOCK: deployTransaction.blockNumber,
     THE_GRAPH_ENDPOINT: `https://api.studio.thegraph.com/query/your-subgraph-id/usdt-data-tracker/version/latest`,
     ETHERSCAN_BASE_URL: getEtherscanUrl(hre.network.name)
   };
@@ -90,17 +93,17 @@ async function main() {
   console.log("🌐 前端配置已保存到:", configFile);
 
   // 7. 生成子图配置
-  const subgraphConfig = generateSubgraphConfig(dataStorage.address, dataStorage.deployTransaction.blockNumber);
+  const subgraphConfig = generateSubgraphConfig(contractAddress, deployTransaction.blockNumber);
   const subgraphFile = path.join(__dirname, '../subgraph-generated.yaml');
   fs.writeFileSync(subgraphFile, subgraphConfig);
   console.log("📊 子图配置已生成:", subgraphFile);
 
   console.log("\n🎉 部署完成!");
   console.log("📋 摘要:");
-  console.log("  - 合约地址:", dataStorage.address);
+  console.log("  - 合约地址:", contractAddress);
   console.log("  - 网络:", hre.network.name);
   console.log("  - 测试数据:", testData.length, "条");
-  console.log("  - Gas 消耗: 估算", ethers.utils.formatUnits(deploymentInfo.gasUsed || "0", "gwei"), "Gwei");
+  console.log("  - Gas 消耗: 估算", ethers.formatUnits(deploymentInfo.gasUsed || "0", "gwei"), "Gwei");
 
   return deploymentInfo;
 }
