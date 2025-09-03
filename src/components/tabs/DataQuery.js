@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { ethers } from 'ethers';
 import TransactionTable from '../ui/TransactionTable';
+import { QUERY_TEMPLATES } from '../../utils/constants';
 
 const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) => {
   const { wallet } = useWallet();
@@ -10,19 +11,7 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
   const [queryResults, setQueryResults] = useState(null);
   const [form, setForm] = useState({
     transactionHash: '',
-    address: '',
-    blockNumber: '',
-    graphqlQuery: `query GetRecentData {
-  dataStoreds(first: 10, orderBy: timestamp, orderDirection: desc) {
-    id
-    user
-    data
-    dataType
-    timestamp
-    blockNumber
-    transactionHash
-  }
-}`
+    graphqlQuery: QUERY_TEMPLATES.RECENT_DATA
   });
 
   const handleTransactionQuery = async () => {
@@ -55,11 +44,11 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
         try {
           decodedData = ethers.toUtf8String(tx.data);
         } catch (e) {
-          decodedData = '无法解码的二进制数据';
+          decodedData = '无法解码的二进制数据: ' + tx.data;
         }
       }
 
-      const result = {
+      const result = [{
         hash: tx.hash,
         from: tx.from,
         to: tx.to,
@@ -67,13 +56,13 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
         gasUsed: receipt?.gasUsed?.toString() || 'N/A',
         gasPrice: tx.gasPrice ? ethers.formatUnits(tx.gasPrice, 'gwei') : 'N/A',
         blockNumber: tx.blockNumber,
-        timestamp: receipt ? new Date(Date.now()).toLocaleString() : 'N/A',
-        status: receipt?.status ? '成功' : '失败',
+        timestamp: receipt ? new Date().toLocaleString() : 'N/A',
+        status: receipt?.status || 0,
         data: decodedData,
         rawData: tx.data
-      };
+      }];
 
-      setQueryResults([result]);
+      setQueryResults(result);
       
       setTimeout(() => {
         hideProgress();
@@ -93,17 +82,14 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
       showProgress('执行 The Graph 查询...');
       updateProgress(1);
 
-      const endpoint = 'https://api.thegraph.com/subgraphs/name/limuran/usdt-data-tracker';
+      const endpoint = process.env.REACT_APP_GRAPH_API_URL || 
+        'https://api.thegraph.com/subgraphs/name/limuran/usdt-data-tracker';
       
       updateProgress(2);
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          query: form.graphqlQuery
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: form.graphqlQuery })
       });
 
       updateProgress(3);
@@ -126,6 +112,10 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadTemplate = (templateKey) => {
+    setForm(prev => ({ ...prev, graphqlQuery: QUERY_TEMPLATES[templateKey] }));
   };
 
   return (
@@ -191,6 +181,30 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
           <h3 className="text-lg font-bold text-purple-900 mb-4">📈 The Graph 子图查询</h3>
           
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">📝 查询模板</label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => loadTemplate('RECENT_DATA')}
+                  className="bg-purple-100 hover:bg-purple-200 text-purple-700 py-2 px-3 rounded-lg text-xs font-medium"
+                >
+                  📊 最新数据
+                </button>
+                <button
+                  onClick={() => loadTemplate('USER_TRANSFERS')}
+                  className="bg-purple-100 hover:bg-purple-200 text-purple-700 py-2 px-3 rounded-lg text-xs font-medium"
+                >
+                  👤 用户转账
+                </button>
+                <button
+                  onClick={() => loadTemplate('DATA_BY_TYPE')}
+                  className="bg-purple-100 hover:bg-purple-200 text-purple-700 py-2 px-3 rounded-lg text-xs font-medium"
+                >
+                  🏷️ 按类型
+                </button>
+              </div>
+            </div>
+            
             <div>
               <label className="block text-sm font-medium mb-2">📊 GraphQL 查询</label>
               <textarea

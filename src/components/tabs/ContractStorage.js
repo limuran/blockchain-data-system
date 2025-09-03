@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { ethers } from 'ethers';
+import { CONTRACT_ABIS } from '../../utils/constants';
 
 const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress }) => {
   const { wallet } = useWallet();
@@ -14,12 +15,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     data: '用户注册信息: 姓名:张三 邮箱:zhangsan@example.com 时间:2025-01-15 User info: John john@example.com'
   });
 
-  const DATA_STORAGE_ABI = [
-    'function storeData(string memory data, string memory dataType) external',
-    'function getDataCount() external view returns (uint256)',
-    'event DataStored(address indexed user, string data, uint256 timestamp, string dataType, uint256 indexed entryId, uint256 blockNumber)'
-  ];
-
+  // 检查合约状态
   useEffect(() => {
     const checkContract = async () => {
       if (contractAddress && window.ethereum) {
@@ -28,7 +24,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
           const code = await provider.getCode(contractAddress);
           
           if (code !== '0x') {
-            const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABI, provider);
+            const contract = new ethers.Contract(contractAddress, CONTRACT_ABIS.DATA_STORAGE, provider);
             const totalCount = await contract.getDataCount();
             
             setContractInfo({
@@ -58,13 +54,11 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     try {
       showProgress('部署DataStorage合约...');
       
-      // 模拟部署过程
       for (let i = 1; i <= 4; i++) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         updateProgress(i);
       }
 
-      // 生成模拟地址
       const mockAddress = '0x' + Array.from({length: 40}, () => 
         Math.floor(Math.random() * 16).toString(16)).join('');
 
@@ -102,10 +96,9 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
 
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABI, signer);
+      const contract = new ethers.Contract(contractAddress, CONTRACT_ABIS.DATA_STORAGE, signer);
 
       updateProgress(2);
-
       const tx = await contract.storeData(form.data, form.dataType);
       
       updateProgress(3);
@@ -226,6 +219,17 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
         >
           {loading ? '写入中...' : '📝 写入合约数据'}
         </button>
+        
+        <div className="mt-4 bg-green-100 border border-green-300 rounded-lg p-4">
+          <h4 className="font-semibold text-green-900 mb-2">🎡 合约存储优势</h4>
+          <div className="text-sm text-green-800 space-y-1">
+            <p>• 📝 专用合约永久存储结构化数据</p>
+            <p>• 🔔 通过事件日志记录所有操作</p>
+            <p>• 🎡 The Graph自动索引事件数据</p>
+            <p>• 🔍 支持复杂查询和数据分析</p>
+            <p>• 💾 数据不可篡改，永久保存</p>
+          </div>
+        </div>
       </div>
     </div>
   );
