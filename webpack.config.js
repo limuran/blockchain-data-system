@@ -13,17 +13,22 @@ module.exports = (env, argv) => {
       clean: true,
       publicPath: '/'
     },
+    
     resolve: {
-      extensions: ['.js', '.jsx', '.json'],
+      extensions: ['.js', '.jsx'],
       alias: {
-        '@': path.resolve(__dirname, 'src'),
-        '@components': path.resolve(__dirname, 'src/components'),
-        '@hooks': path.resolve(__dirname, 'src/hooks'),
-        '@utils': path.resolve(__dirname, 'src/utils'),
-        '@contracts': path.resolve(__dirname, 'src/contracts'),
-        '@config': path.resolve(__dirname, 'src/config')
+        '@': path.resolve(__dirname, 'src')
+      },
+      fallback: {
+        "crypto": require.resolve("crypto-browserify"),
+        "stream": require.resolve("stream-browserify"),
+        "buffer": require.resolve("buffer"),
+        "util": require.resolve("util"),
+        "url": require.resolve("url"),
+        "assert": require.resolve("assert")
       }
     },
+    
     module: {
       rules: [
         {
@@ -32,10 +37,9 @@ module.exports = (env, argv) => {
           use: {
             loader: 'babel-loader',
             options: {
-              presets: ['@babel/preset-env', '@babel/preset-react'],
-              plugins: [
-                ['@babel/plugin-proposal-class-properties'],
-                ['@babel/plugin-transform-runtime']
+              presets: [
+                ['@babel/preset-env', { targets: 'defaults' }],
+                ['@babel/preset-react', { runtime: 'automatic' }]
               ]
             }
           }
@@ -59,60 +63,39 @@ module.exports = (env, argv) => {
           ]
         },
         {
-          test: /\.(png|jpe?g|gif|svg)$/i,
+          test: /\.(png|svg|jpg|jpeg|gif)$/i,
           type: 'asset/resource'
         }
       ]
     },
+    
     plugins: [
       new HtmlWebpackPlugin({
         template: './public/index.html',
-        title: '区块链数据上链系统',
-        favicon: './public/favicon.ico'
+        favicon: false
       }),
       new Dotenv({
         path: './.env',
-        safe: true,
-        systemvars: true,
-        silent: true
+        safe: false,
+        systemvars: true
       })
     ],
+    
     devServer: {
       static: {
         directory: path.join(__dirname, 'public')
       },
       port: 3000,
-      hot: true,
       open: true,
+      hot: true,
       historyApiFallback: true,
-      client: {
-        overlay: {
-          errors: true,
-          warnings: false
-        }
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+        "Access-Control-Allow-Headers": "X-Requested-With, content-type, Authorization"
       }
     },
-    optimization: {
-      splitChunks: {
-        chunks: 'all',
-        cacheGroups: {
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            chunks: 'all'
-          },
-          ethers: {
-            test: /[\\/]node_modules[\\/]ethers[\\/]/,
-            name: 'ethers',
-            chunks: 'all'
-          }
-        }
-      }
-    },
-    performance: {
-      hints: isDevelopment ? false : 'warning',
-      maxAssetSize: 512000,
-      maxEntrypointSize: 512000
-    }
+    
+    devtool: isDevelopment ? 'eval-source-map' : 'source-map'
   };
 };
