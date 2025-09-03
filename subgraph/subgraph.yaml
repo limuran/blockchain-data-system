@@ -1,0 +1,29 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: DataStorage
+    network: sepolia
+    source:
+      address: "0x742d35Cc6635C0532925a3b8D7389EC4c5B8b8F1" # 替换为实际部署的合约地址
+      abi: DataStorage
+      startBlock: 5000000 # 替换为合约部署的区块号
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - DataEntry
+        - User
+        - DataType
+        - Stats
+      abis:
+        - name: DataStorage
+          file: ./abis/DataStorage.json
+      eventHandlers:
+        - event: DataStored(indexed address,string,uint256,string,indexed uint256,uint256)
+          handler: handleDataStored
+        - event: UserFirstData(indexed address,uint256)
+          handler: handleUserFirstData
+      file: ./src/data-storage.ts
