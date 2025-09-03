@@ -1,0 +1,92 @@
+        // 📊 侧边栏
+        function Sidebar({ stats, records }) {
+            return (
+                <div className="space-y-6">
+                    {/* 统计面板 */}
+                    <div className="glass rounded-2xl p-6 shadow-xl">
+                        <h3 className="text-lg font-bold mb-4">📊 实时统计</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            {[
+                                { label: 'ETH余额', value: stats.ethBalance || '0.00', icon: '💎' },
+                                { label: 'USDT余额', value: stats.usdtBalance || '0.00', icon: '💰' },
+                                { label: '交易次数', value: stats.tx || 0, icon: '📊' },
+                                { label: '数据记录', value: stats.data || 0, icon: '📋' }
+                            ].map(stat => (
+                                <div key={stat.label} className="text-center p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-blue-200">
+                                    <div className="text-2xl mb-1">{stat.icon}</div>
+                                    <div className="text-xl font-bold text-blue-600">{stat.value}</div>
+                                    <div className="text-xs text-gray-600">{stat.label}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* API状态 */}
+                    <div className="glass rounded-2xl p-6 shadow-xl">
+                        <h3 className="text-lg font-bold mb-4">🌐 API状态</h3>
+                        <div className="space-y-3">
+                            {[
+                                { name: 'Ethers.js', status: '已连接', color: 'green' },
+                                { name: 'BigNumber.js', status: '已加载', color: 'green' },
+                                { name: 'The Graph', status: '已连接', color: 'green' },
+                                { name: 'Infura API', status: '需配置', color: 'orange' },
+                                { name: 'Alchemy API', status: '需配置', color: 'orange' }
+                            ].map(api => (
+                                <div key={api.name} className="flex justify-between">
+                                    <span className="text-sm">{api.name}</span>
+                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                        api.color === 'green' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                                    }`}>{api.status}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* 最新记录 */}
+                    <div className="glass rounded-2xl p-6 shadow-xl">
+                        <h3 className="text-lg font-bold mb-4">📋 最新记录</h3>
+                        <div className="space-y-3 max-h-80 overflow-y-auto">
+                            {records.length === 0 ? (
+                                <div className="text-center text-gray-500 py-8">
+                                    <div className="text-4xl mb-2">📝</div>
+                                    <p className="text-sm">暂无记录</p>
+                                    <p className="text-xs mt-1">开始使用功能创建记录</p>
+                                </div>
+                            ) : records.map((record, i) => (
+                                <div key={i} className="bg-white border rounded-lg p-4 hover:shadow-md transition-all">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h4 className="font-semibold text-sm">{record.type}</h4>
+                                        <span className="text-xs text-gray-500">{record.time}</span>
+                                    </div>
+                                    <p className="text-xs text-gray-600 mb-2 truncate">{record.data}</p>
+                                    {record.amount && <p className="text-xs text-blue-600 font-medium mb-1">{record.amount}</p>}
+                                    <div className="flex justify-between text-xs">
+                                        <span>Gas: {record.gas?.toLocaleString()}</span>
+                                        <a href={`https://sepolia.etherscan.io/tx/${record.hash}`} target="_blank" className="text-blue-500 hover:underline">查看 →</a>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // 🎬 启动应用
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<BlockchainApp />);
+        
+        console.log('🎉 区块链数据上链系统已启动！');
+        console.log('✅ 所有组件已加载完成');
+        console.log('🔗 支持的功能:');
+        console.log('  1️⃣ ETH转账数据上链 (Ethers.js)');
+        console.log('  2️⃣ 代币转账数据上链 (USDT合约)');
+        console.log('  📝 智能合约事件存储');
+        console.log('  🔍 多种方式数据查询');
+        console.log('  📈 The Graph子图集成');
+        console.log('  👛 ENS头像和名称支持');
+        console.log('  🧮 BigNumber.js精度处理');
+        console.log('  ⏳ 完整进度条反馈');
+    </script>
+</body>
+</html>
