@@ -15,7 +15,7 @@
 - **前端**: HTML5 + CSS3 + JavaScript (ES6+)
 - **智能合约**: Solidity ^0.8.19
 - **开发框架**: Hardhat
-- **区块链交互**: Ethers.js v5
+- **区块链交互**: Ethers.js v6
 - **数据索引**: The Graph Protocol
 - **测试网络**: Sepolia, Goerli, Mumbai
 - **数字处理**: BigNumber.js
