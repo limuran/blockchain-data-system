@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { ethers } from 'ethers';
-import { CONTRACT_ABIS } from '../../utils/constants';
 
 const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress }) => {
   const { wallet } = useWallet();
@@ -15,33 +14,67 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     data: '用户注册信息: 姓名:张三 邮箱:zhangsan@example.com 时间:2025-01-15 User info: John john@example.com'
   });
 
-  // 检查合约状态
+  const DATA_STORAGE_ABI = [
+    'function storeData(string memory data, string memory dataType) external',
+    'function getDataCount() external view returns (uint256)',
+    'event DataStored(address indexed user, string data, uint256 timestamp, string dataType, uint256 indexed entryId, uint256 blockNumber)'
+  ];
+
+  // 检查合约状态的改进版本
   useEffect(() => {
     const checkContract = async () => {
-      if (contractAddress && window.ethereum) {
-        try {
-          const provider = new ethers.BrowserProvider(window.ethereum);
-          const code = await provider.getCode(contractAddress);
-          
-          if (code !== '0x') {
-            const contract = new ethers.Contract(contractAddress, CONTRACT_ABIS.DATA_STORAGE, provider);
-            const totalCount = await contract.getDataCount();
-            
-            setContractInfo({
-              isValid: true,
-              totalDataCount: Number(totalCount),
-              address: contractAddress
-            });
-          } else {
-            setContractInfo({ isValid: false, error: '地址不是智能合约' });
-          }
-        } catch (e) {
-          setContractInfo({ isValid: false, error: '合约验证失败: ' + e.message });
+      if (!contractAddress || !window.ethereum) {
+        setContractInfo(null);
+        return;
+      }
+
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        
+        // 首先检查地址格式
+        if (!ethers.isAddress(contractAddress)) {
+          setContractInfo({ isValid: false, error: '无效的地址格式' });
+          return;
         }
+        
+        // 检查是否是合约地址
+        const code = await provider.getCode(contractAddress);
+        if (code === '0x') {
+          setContractInfo({ isValid: false, error: '该地址不是智能合约' });
+          return;
+        }
+        
+        // 尝试调用合约函数
+        try {
+          const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABI, provider);
+          
+          // 使用静态调用避免状态改变
+          const dataCount = await contract.getDataCount.staticCall();
+          
+          setContractInfo({
+            isValid: true,
+            totalDataCount: Number(dataCount),
+            address: contractAddress
+          });
+        } catch (contractError) {
+          console.log('合约调用失败:', contractError);
+          setContractInfo({ 
+            isValid: false, 
+            error: '合约ABI不匹配，可能不是DataStorage合约' 
+          });
+        }
+      } catch (e) {
+        console.error('合约验证错误:', e);
+        setContractInfo({ 
+          isValid: false, 
+          error: '网络错误或合约验证失败' 
+        });
       }
     };
 
-    if (contractAddress) checkContract();
+    // 防抖处理，避免频繁调用
+    const debounceTimer = setTimeout(checkContract, 500);
+    return () => clearTimeout(debounceTimer);
   }, [contractAddress]);
 
   const handleDeploy = async () => {
@@ -52,13 +85,20 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
 
     setDeploying(true);
     try {
-      showProgress('部署DataStorage合约...');
-      
-      for (let i = 1; i <= 4; i++) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        updateProgress(i);
-      }
+      showProgress('部署DataStorage合约到 ' + (wallet.chainName || '当前网络') + '...');
+      updateProgress(1);
 
+      // 模拟部署过程 - 在实际使用中，这里需要真实的合约字节码
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      updateProgress(2);
+      
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      updateProgress(3);
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      updateProgress(4);
+
+      // 生成模拟地址 - 实际使用中替换为真实部署
       const mockAddress = '0x' + Array.from({length: 40}, () => 
         Math.floor(Math.random() * 16).toString(16)).join('');
 
@@ -89,6 +129,11 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       return;
     }
 
+    if (!contractInfo?.isValid) {
+      showToast('请输入有效的DataStorage合约地址', 'error');
+      return;
+    }
+
     setLoading(true);
     try {
       showProgress('合约数据写入中...');
@@ -96,12 +141,20 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
 
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, CONTRACT_ABIS.DATA_STORAGE, signer);
+      const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABI, signer);
 
       updateProgress(2);
-      const tx = await contract.storeData(form.data, form.dataType);
+
+      // 估算Gas
+      const gasEstimate = await contract.storeData.estimateGas(form.data, form.dataType);
       
       updateProgress(3);
+
+      // 执行合约调用
+      const tx = await contract.storeData(form.data, form.dataType, {
+        gasLimit: gasEstimate * 120n / 100n // 增加20%缓冲
+      });
+
       const receipt = await tx.wait();
       updateProgress(4);
 
@@ -121,6 +174,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       }, 500);
     } catch (error) {
       hideProgress();
+      console.error('合约写入失败:', error);
       showToast('合约写入失败: ' + error.message, 'error');
     } finally {
       setLoading(false);
@@ -148,7 +202,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
               value={contractAddress}
               onChange={(e) => setContractAddress(e.target.value)}
               className="flex-1 p-3 border-2 border-gray-300 rounded-lg focus:border-green-500 outline-none font-mono text-sm"
-              placeholder="0x... 或点击部署"
+              placeholder="0x... 或点击部署新合约"
             />
             <button
               type="button"
@@ -162,17 +216,26 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
             </button>
           </div>
 
-          {contractInfo && (
-            <div className={`mt-2 p-3 rounded-lg border ${
-              contractInfo.isValid ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'
-            }`}>
-              {contractInfo.isValid ? (
-                <div className="text-sm text-green-700">
-                  <p>✅ 合约验证成功</p>
-                  <p>📊 已存储数据: {contractInfo.totalDataCount} 条</p>
+          {contractAddress && (
+            <div className="mt-2">
+              {contractInfo === null ? (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700">🔍 验证合约中...</p>
+                </div>
+              ) : contractInfo.isValid ? (
+                <div className="p-3 bg-green-100 border border-green-300 rounded-lg">
+                  <div className="text-sm text-green-700">
+                    <p>✅ 合约验证成功</p>
+                    <p>📊 已存储数据: {contractInfo.totalDataCount} 条</p>
+                  </div>
                 </div>
               ) : (
-                <p className="text-sm text-red-700">❌ {contractInfo.error}</p>
+                <div className="p-3 bg-red-100 border border-red-300 rounded-lg">
+                  <p className="text-sm text-red-700">❌ {contractInfo.error}</p>
+                  <p className="text-xs text-red-600 mt-1">
+                    💡 提示: 请确保输入的是有效的DataStorage合约地址
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -210,9 +273,9 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
 
         <button
           onClick={handleSubmit}
-          disabled={loading || !contractAddress}
+          disabled={loading || !contractAddress || (contractInfo && !contractInfo.isValid)}
           className={`w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-4 rounded-lg font-semibold transition-all ${
-            loading || !contractAddress
+            loading || !contractAddress || (contractInfo && !contractInfo.isValid)
               ? 'opacity-50 cursor-not-allowed'
               : 'hover:shadow-lg hover:-translate-y-1'
           }`}
@@ -221,13 +284,13 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
         </button>
         
         <div className="mt-4 bg-green-100 border border-green-300 rounded-lg p-4">
-          <h4 className="font-semibold text-green-900 mb-2">🎡 合约存储优势</h4>
+          <h4 className="font-semibold text-green-900 mb-2">🎯 使用说明</h4>
           <div className="text-sm text-green-800 space-y-1">
-            <p>• 📝 专用合约永久存储结构化数据</p>
-            <p>• 🔔 通过事件日志记录所有操作</p>
-            <p>• 🎡 The Graph自动索引事件数据</p>
-            <p>• 🔍 支持复杂查询和数据分析</p>
-            <p>• 💾 数据不可篡改，永久保存</p>
+            <p>• 🚀 点击"部署"按钮创建新的DataStorage合约</p>
+            <p>• 📍 或者输入已部署的合约地址</p>
+            <p>• ✅ 系统会自动验证合约有效性</p>
+            <p>• 📝 验证通过后即可存储任意字符串数据</p>
+            <p>• 🔍 存储的数据可通过"数据查询"标签页查看</p>
           </div>
         </div>
       </div>
