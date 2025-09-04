@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>合约调用：ethers拿钱包的provider</title>
+  </head>
+  <body></body>
+  <script>
+    // 每一个钱包获取provider
+    const provider = new ethers.BrowserProvider(window.ethereum)
+    // 激活这个钱包
+    const activeWallet = wallet.connect(provider)
+    // 拿到用户的签名
+    const signer = await provider.getSigner()
+    // abi.json 描述了一个合约的全部的函数、方法、事件
+    fetch('./InfoContract.json', async()=>{
+      const contractAddress = data.networks('5777').address; // 获取合约地址
+      const contract = new ethers.Contract(contractAddress, data.abi, signer);
+      //gas
+      await contract.setInfo('this is first data to contract', parseInt(Math.random() * 20));
+    })
+  </script>
+</html>

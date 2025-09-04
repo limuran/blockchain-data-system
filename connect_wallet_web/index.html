@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>手写调用钱包</title>
+  </head>
+  <body>
+    使用原生的Js调用metamask，获取钱包地址和余额
+    <button id="connect">链接钱包</button>
+    <div>
+      钱包地址：
+      <span id="address"></span>
+    </div>
+    <div>
+      余额:
+      <span id="remaining_sum">_</span>ETH
+    </div>
+  </body>
+  <script>
+    document.getElementById('connect').addEventListener('click', async () => {
+      if (typeof window.ethereum === 'undefined') {
+        // 有可能别的钱包也会抢这个全局变量
+        console.log('请安装metamask钱包')
+        return
+      }
+      try {
+        const accounts = await window.ethereum.request({
+          method: 'eth_requestAccounts'
+        })
+        const account = accounts[0]
+        console.log('已连接到的钱包', account)
+        const balance = await window.ethereum.request({
+          method: 'eth_getBalance',
+          params: [account, 'latest']
+        })
+        document.getElementById('address').textContent = account
+        const balanceInEth = parseFloat(balance) / 1e18
+        document.getElementById('remaining_sum').textContent = balanceInEth
+      } catch (error) {}
+    })
+  </script>
+</html>

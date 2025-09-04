@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InfoContract Wallet Interface</title>
+    <script src="./node_modules/ethers/dist/ethers.umd.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .container {
+        background: #f5f5f5;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 10px 0;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      input, textarea {
+        width: 100%;
+        padding: 8px;
+        margin: 5px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .status {
+        margin: 10px 0;
+        padding: 10px;
+        border-radius: 5px;
+        background: #e9ecef;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>InfoContract Interface</h1>
+    
+    <div class="container">
+      <h3>Wallet Connection</h3>
+      <button onclick="connectWallet()">Connect Wallet</button>
+      <div id="walletStatus" class="status">Wallet not connected</div>
+    </div>
+
+    <div class="container">
+      <h3>Contract Configuration</h3>
+      <input type="text" id="contractAddress" placeholder="Contract Address (0x...)" />
+      <button onclick="loadContract()">Load Contract</button>
+      <div id="contractStatus" class="status">Contract not loaded - Enter the deployed contract address (not your wallet address)</div>
+    </div>
+
+    <div class="container">
+      <h3>Contract Functions</h3>
+      <div>
+        <h4>Set Info</h4>
+        <input type="text" id="nameInput" placeholder="Name" />
+        <input type="number" id="ageInput" placeholder="Age" />
+        <button onclick="setInfo()">Set Info</button>
+      </div>
+      <div>
+        <h4>Say Hi</h4>
+        <button onclick="sayHi()">Say Hi</button>
+        <div id="hiResult" class="status"></div>
+      </div>
+    </div>
+
+    <div class="container">
+      <h3>Event Logs</h3>
+      <button onclick="getEvents()">Get Events</button>
+      <div id="eventLogs" class="status"></div>
+    </div>
+
+    <script type="module">
+      let provider;
+      let signer;
+      let contract;
+      let contractABI;
+
+      // Load the ABI from InfoContract.json
+      async function loadABI() {
+        try {
+          const response = await fetch('./InfoContract.json');
+          const contractData = await response.json();
+          contractABI = contractData.abi;
+          console.log('ABI loaded successfully');
+        } catch (error) {
+          console.error('Failed to load ABI:', error);
+          alert('Failed to load contract ABI');
+        }
+      }
+
+      // Connect wallet function
+      window.connectWallet = async function() {
+        if (typeof window.ethereum !== 'undefined') {
+          try {
+            await window.ethereum.request({ method: 'eth_requestAccounts' });
+            provider = new ethers.BrowserProvider(window.ethereum);
+            signer = await provider.getSigner();
+            const address = await signer.getAddress();
+            document.getElementById('walletStatus').innerHTML = `Connected: ${address}`;
+            console.log('Wallet connected:', address);
+          } catch (error) {
+            console.error('Failed to connect wallet:', error);
+            document.getElementById('walletStatus').innerHTML = 'Failed to connect wallet';
+          }
+        } else {
+          alert('Please install MetaMask or another Ethereum wallet');
+        }
+      };
+
+      // Load contract function
+      window.loadContract = async function() {
+        const address = document.getElementById('contractAddress').value;
+        if (!address || !contractABI || !signer) {
+          alert('Please enter contract address, load ABI, and connect wallet first');
+          return;
+        }
+
+        // Validate contract address format
+        if (!ethers.isAddress(address)) {
+          alert('Please enter a valid contract address');
+          return;
+        }
+
+        // Check if address is the same as wallet address
+        const walletAddress = await signer.getAddress();
+        if (address.toLowerCase() === walletAddress.toLowerCase()) {
+          alert('Contract address cannot be the same as your wallet address. Please enter the deployed contract address.');
+          return;
+        }
+
+        try {
+          contract = new ethers.Contract(address, contractABI, signer);
+          
+          // Test if it's a valid contract by calling a read function
+          try {
+            await contract.sayHi();
+            document.getElementById('contractStatus').innerHTML = `Contract loaded at: ${address}`;
+            console.log('Contract loaded successfully');
+          } catch (testError) {
+            console.warn('Contract loaded but test call failed:', testError);
+            document.getElementById('contractStatus').innerHTML = `Contract loaded at: ${address} (Warning: Contract may not be deployed or ABI mismatch)`;
+          }
+        } catch (error) {
+          console.error('Failed to load contract:', error);
+          document.getElementById('contractStatus').innerHTML = 'Failed to load contract';
+        }
+      };
+
+      // Set info function
+      window.setInfo = async function() {
+        if (!contract) {
+          alert('Please load contract first');
+          return;
+        }
+
+        const name = document.getElementById('nameInput').value;
+        const age = document.getElementById('ageInput').value;
+
+        if (!name || !age) {
+          alert('Please enter both name and age');
+          return;
+        }
+
+        try {
+          const tx = await contract.setinfo(name, parseInt(age));
+          console.log('Transaction sent:', tx.hash);
+          alert(`Transaction sent: ${tx.hash}`);
+          
+          // Wait for transaction confirmation
+          const receipt = await tx.wait();
+          console.log('Transaction confirmed:', receipt);
+          alert('Transaction confirmed!');
+        } catch (error) {
+          console.error('Failed to set info:', error);
+          alert('Failed to set info: ' + error.message);
+        }
+      };
+
+      // Say hi function
+      window.sayHi = async function() {
+        if (!contract) {
+          alert('Please load contract first');
+          return;
+        }
+
+        try {
+          const result = await contract.sayHi();
+          document.getElementById('hiResult').innerHTML = `Result: ${result}`;
+          console.log('Say hi result:', result);
+        } catch (error) {
+          console.error('Failed to call sayHi:', error);
+          document.getElementById('hiResult').innerHTML = 'Failed to call sayHi';
+        }
+      };
+
+      // Get events function
+      window.getEvents = async function() {
+        if (!contract) {
+          alert('Please load contract first');
+          return;
+        }
+
+        try {
+          const filter = contract.filters.Instructor();
+          const events = await contract.queryFilter(filter);
+          
+          let eventHtml = '<h4>Instructor Events:</h4>';
+          events.forEach((event, index) => {
+            eventHtml += `<div><strong>Event ${index + 1}:</strong> Name: ${event.args.name}, Age: ${event.args.age}</div>`;
+          });
+          
+          document.getElementById('eventLogs').innerHTML = eventHtml || 'No events found';
+          console.log('Events:', events);
+        } catch (error) {
+          console.error('Failed to get events:', error);
+          document.getElementById('eventLogs').innerHTML = 'Failed to get events';
+        }
+      };
+
+      // Initialize the app
+      async function init() {
+        await loadABI();
+      }
+
+      // Load ABI when page loads
+      init();
+    </script>
+  </body>
+</html>

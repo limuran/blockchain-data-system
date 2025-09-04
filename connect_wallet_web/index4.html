@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InfoContract Interface</title>
+    <script src="./node_modules/ethers/dist/ethers.umd.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .main-container {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+
+      .header {
+        text-align: center;
+        color: white;
+        margin-bottom: 40px;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+      }
+
+      .card h3 {
+        color: #2d3748;
+        margin-bottom: 16px;
+        font-size: 1.3rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .btn {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        margin: 4px;
+      }
+
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .btn:disabled {
+        background: #cbd5e0;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .btn-secondary {
+        background: linear-gradient(45deg, #4a5568, #2d3748);
+      }
+
+      .input-group {
+        margin: 12px 0;
+      }
+
+      .input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.3s ease;
+      }
+
+      .input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .status {
+        margin: 16px 0;
+        padding: 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .status.default {
+        background: #f7fafc;
+        color: #4a5568;
+        border: 1px solid #e2e8f0;
+      }
+
+      .status.success {
+        background: #f0fff4;
+        color: #2f855a;
+        border: 1px solid #9ae6b4;
+      }
+
+      .status.error {
+        background: #fed7d7;
+        color: #c53030;
+        border: 1px solid #feb2b2;
+      }
+
+      .status.warning {
+        background: #fffaf0;
+        color: #d69e2e;
+        border: 1px solid #fbd38d;
+      }
+
+      .status.loading {
+        background: #ebf8ff;
+        color: #3182ce;
+        border: 1px solid #90cdf4;
+        position: relative;
+      }
+
+      .status.loading::after {
+        content: '';
+        width: 16px;
+        height: 16px;
+        border: 2px solid #3182ce;
+        border-top: 2px solid transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        margin-left: 8px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .function-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 16px 0;
+        border: 1px solid #e9ecef;
+      }
+
+      .function-section h4 {
+        color: #495057;
+        margin-bottom: 12px;
+      }
+
+      .input-row {
+        display: flex;
+        gap: 12px;
+        margin: 12px 0;
+      }
+
+      .input-row .input {
+        flex: 1;
+      }
+
+      .event-item {
+        background: white;
+        padding: 16px;
+        border-radius: 8px;
+        margin: 8px 0;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .event-item strong {
+        color: #2d3748;
+      }
+
+      .tx-hash {
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 12px;
+        word-break: break-all;
+        background: #f1f5f9;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+
+      .network-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+      }
+
+      .network-item {
+        background: #f8f9fa;
+        padding: 12px;
+        border-radius: 8px;
+        text-align: center;
+      }
+
+      .network-item strong {
+        display: block;
+        color: #2d3748;
+        margin-bottom: 4px;
+      }
+
+      .hide {
+        display: none;
+      }
+
+      .footer {
+        text-align: center;
+        color: white;
+        margin-top: 40px;
+        opacity: 0.8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="main-container">
+      <div class="header">
+        <h1>🔗 InfoContract DApp</h1>
+        <p>Smart Contract Interaction Interface</p>
+      </div>
+
+      <!-- Wallet Connection -->
+      <div class="card">
+        <h3>🦊 Wallet Connection</h3>
+        <button class="btn" onclick="connectWallet()">Connect MetaMask</button>
+        <div id="walletStatus" class="status default">
+          Please connect your wallet to continue
+        </div>
+      </div>
+
+      <!-- Contract Setup -->
+      <div class="card">
+        <h3>📜 Contract Setup</h3>
+        <div class="input-group">
+          <input
+            type="text"
+            id="contractAddress"
+            class="input"
+            placeholder="Enter contract address (0x...)"
+          />
+        </div>
+        <button class="btn" onclick="loadContract()">Load Contract</button>
+        <div id="contractStatus" class="status default">
+          Enter contract address to load ABI
+        </div>
+      </div>
+
+      <!-- Contract Functions -->
+      <div class="card">
+        <h3>⚡ Contract Functions</h3>
+
+        <!-- Set Info Function -->
+        <div class="function-section">
+          <h4>📝 Set Information</h4>
+          <div class="input-row">
+            <input
+              type="text"
+              id="nameInput"
+              class="input"
+              placeholder="Enter name"
+            />
+            <input
+              type="number"
+              id="ageInput"
+              class="input"
+              placeholder="Enter age"
+            />
+          </div>
+          <button class="btn" onclick="setInfo()">Set Info</button>
+          <div id="setInfoResult" class="status default hide">
+            Ready to set information
+          </div>
+        </div>
+
+        <!-- Read Functions -->
+        <div class="function-section">
+          <h4>📖 Read Functions</h4>
+          <button class="btn btn-secondary" onclick="sayHi()">Say Hi</button>
+          <button class="btn btn-secondary" onclick="getInfo()">
+            Get Stored Info
+          </button>
+          <div id="readResults" class="status default hide">
+            Click a button to read from contract
+          </div>
+        </div>
+      </div>
+
+      <!-- Events -->
+      <div class="card">
+        <h3>📊 Event Logs</h3>
+        <button class="btn btn-secondary" onclick="getEvents()">
+          Load Events
+        </button>
+        <button class="btn btn-secondary" onclick="clearEventLogs()">
+          Clear
+        </button>
+        <div id="eventLogs" class="status default hide">No events loaded</div>
+      </div>
+
+      <!-- Network Info -->
+      <div class="card">
+        <h3>🌐 Network Information</h3>
+        <button class="btn btn-secondary" onclick="getNetworkInfo()">
+          Refresh Network Info
+        </button>
+        <div id="networkInfo" class="status default hide">
+          Click to load network information
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>Built with Ethers.js v6 | InfoContract DApp</p>
+      </div>
+    </div>
+
+    <script>
+      // Global variables
+      let provider = null
+      let signer = null
+      let contract = null
+      let contractABI = null
+      let userAccount = null
+
+      // Utility functions
+      function showStatus(elementId, message, type = 'default') {
+        const element = document.getElementById(elementId)
+        element.innerHTML = message
+        element.className = `status ${type}`
+        element.classList.remove('hide')
+      }
+
+      function hideStatus(elementId) {
+        const element = document.getElementById(elementId)
+        element.classList.add('hide')
+      }
+
+      // Load ABI from InfoContract.json
+      async function loadABI() {
+        try {
+          const response = await fetch('./InfoContract.json')
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+          }
+          const contractData = await response.json()
+          contractABI = contractData.abi
+          console.log('✅ Contract ABI loaded successfully')
+          return true
+        } catch (error) {
+          console.error('❌ Failed to load ABI:', error)
+          showStatus(
+            'contractStatus',
+            `❌ Failed to load contract ABI: ${error.message}`,
+            'error'
+          )
+          return false
+        }
+      }
+
+      // Connect wallet
+      async function connectWallet() {
+        try {
+          if (typeof window.ethereum === 'undefined') {
+            showStatus(
+              'walletStatus',
+              '❌ MetaMask is not installed. Please install MetaMask first.',
+              'error'
+            )
+            return
+          }
+
+          showStatus('walletStatus', '🔄 Connecting to MetaMask...', 'loading')
+
+          // Request account access
+          const accounts = await window.ethereum.request({
+            method: 'eth_requestAccounts'
+          })
+
+          if (accounts.length === 0) {
+            showStatus(
+              'walletStatus',
+              '❌ No accounts found. Please unlock MetaMask.',
+              'error'
+            )
+            return
+          }
+
+          // Create provider and signer
+          provider = new ethers.BrowserProvider(window.ethereum)
+          signer = await provider.getSigner()
+          userAccount = await signer.getAddress()
+
+          // Get network info
+          const network = await provider.getNetwork()
+
+          showStatus(
+            'walletStatus',
+            `✅ Connected successfully!<br>
+                    <strong>Account:</strong> ${userAccount}<br>
+                    <strong>Network:</strong> ${network.name} (Chain ID: ${network.chainId})`,
+            'success'
+          )
+
+          console.log('✅ Wallet connected:', userAccount)
+          console.log('🌐 Network:', network)
+        } catch (error) {
+          console.error('❌ Wallet connection failed:', error)
+          showStatus(
+            'walletStatus',
+            `❌ Connection failed: ${error.message}`,
+            'error'
+          )
+        }
+      }
+
+      // Load contract
+      async function loadContract() {
+        try {
+          const address = document
+            .getElementById('contractAddress')
+            .value.trim()
+
+          // Validation
+          if (!address) {
+            showStatus(
+              'contractStatus',
+              '❌ Please enter a contract address',
+              'error'
+            )
+            return
+          }
+
+          if (!ethers.isAddress(address)) {
+            showStatus(
+              'contractStatus',
+              '❌ Invalid contract address format',
+              'error'
+            )
+            return
+          }
+
+          if (!contractABI) {
+            showStatus(
+              'contractStatus',
+              '🔄 Loading contract ABI...',
+              'loading'
+            )
+            const abiLoaded = await loadABI()
+            if (!abiLoaded) {
+              return
+            }
+          }
+
+          if (!signer) {
+            showStatus(
+              'contractStatus',
+              '❌ Please connect your wallet first',
+              'error'
+            )
+            return
+          }
+
+          if (address.toLowerCase() === userAccount?.toLowerCase()) {
+            showStatus(
+              'contractStatus',
+              '❌ Contract address cannot be your wallet address',
+              'error'
+            )
+            return
+          }
+
+          showStatus('contractStatus', '🔄 Loading contract...', 'loading')
+
+          // Create contract instance
+          contract = new ethers.Contract(address, contractABI, signer)
+
+          // Test contract by calling a view function
+          try {
+            await contract.sayHi()
+            showStatus(
+              'contractStatus',
+              `✅ Contract loaded successfully!<br>
+                        <strong>Address:</strong> <span class="tx-hash">${address}</span>`,
+              'success'
+            )
+            console.log('✅ Contract loaded and verified:', address)
+          } catch (testError) {
+            showStatus(
+              'contractStatus',
+              `⚠️ Contract loaded but verification failed<br>
+                        <strong>Address:</strong> <span class="tx-hash">${address}</span><br>
+                        <strong>Warning:</strong> Contract might not be deployed correctly`,
+              'warning'
+            )
+            console.warn('⚠️ Contract test call failed:', testError)
+          }
+        } catch (error) {
+          console.error('❌ Contract loading failed:', error)
+          showStatus(
+            'contractStatus',
+            `❌ Failed to load contract: ${error.message}`,
+            'error'
+          )
+        }
+      }
+
+      // Set info function
+      async function setInfo() {
+        try {
+          if (!contract) {
+            showStatus(
+              'setInfoResult',
+              '❌ Please load the contract first',
+              'error'
+            )
+            return
+          }
+
+          const name = document.getElementById('nameInput').value.trim()
+          const age = document.getElementById('ageInput').value.trim()
+
+          // Validation
+          if (!name || !age) {
+            showStatus(
+              'setInfoResult',
+              '❌ Please enter both name and age',
+              'error'
+            )
+            return
+          }
+
+          if (isNaN(age) || parseInt(age) < 0 || parseInt(age) > 200) {
+            showStatus(
+              'setInfoResult',
+              '❌ Please enter a valid age (0-200)',
+              'error'
+            )
+            return
+          }
+
+          showStatus('setInfoResult', '🚀 Sending transaction...', 'loading')
+
+          // Call contract function
+          const tx = await contract.setinfo(name, parseInt(age))
+
+          showStatus(
+            'setInfoResult',
+            `📤 Transaction sent!<br>
+                    <strong>TX Hash:</strong> <span class="tx-hash">${tx.hash}</span><br>
+                    ⏳ Waiting for confirmation...`,
+            'loading'
+          )
+
+          // Wait for confirmation
+          const receipt = await tx.wait()
+
+          showStatus(
+            'setInfoResult',
+            `✅ Transaction confirmed!<br>
+                    <strong>TX Hash:</strong> <span class="tx-hash">${
+                      tx.hash
+                    }</span><br>
+                    <strong>Block:</strong> ${receipt.blockNumber}<br>
+                    <strong>Gas Used:</strong> ${receipt.gasUsed.toString()}`,
+            'success'
+          )
+
+          // Clear inputs
+          document.getElementById('nameInput').value = ''
+          document.getElementById('ageInput').value = ''
+
+          console.log('✅ Info set successfully:', { name, age, receipt })
+        } catch (error) {
+          console.error('❌ Set info failed:', error)
+          let errorMsg = error.message
+          if (error.reason) {
+            errorMsg = error.reason
+          } else if (error.code === 'ACTION_REJECTED') {
+            errorMsg = 'Transaction was rejected by user'
+          }
+          showStatus(
+            'setInfoResult',
+            `❌ Transaction failed: ${errorMsg}`,
+            'error'
+          )
+        }
+      }
+
+      // Say Hi function
+      async function sayHi() {
+        try {
+          if (!contract) {
+            showStatus(
+              'readResults',
+              '❌ Please load the contract first',
+              'error'
+            )
+            return
+          }
+
+          showStatus('readResults', '📞 Calling sayHi...', 'loading')
+
+          const result = await contract.sayHi()
+
+          showStatus(
+            'readResults',
+            `🎉 sayHi() returned: <strong>"${result}"</strong>`,
+            'success'
+          )
+
+          console.log('✅ sayHi result:', result)
+        } catch (error) {
+          console.error('❌ sayHi failed:', error)
+          showStatus(
+            'readResults',
+            `❌ Failed to call sayHi: ${error.message}`,
+            'error'
+          )
+        }
+      }
+
+      // Get info function
+      async function getInfo() {
+        try {
+          if (!contract) {
+            showStatus(
+              'readResults',
+              '❌ Please load the contract first',
+              'error'
+            )
+            return
+          }
+
+          showStatus(
+            'readResults',
+            '📞 Getting stored information...',
+            'loading'
+          )
+
+          const [name, age] = await contract.getInfo()
+
+          if (!name && age.toString() === '0') {
+            showStatus('readResults', '📭 No information stored yet', 'warning')
+          } else {
+            showStatus(
+              'readResults',
+              `📋 Stored Information:<br>
+                        <strong>Name:</strong> "${name}"<br>
+                        <strong>Age:</strong> ${age.toString()}`,
+              'success'
+            )
+          }
+
+          console.log('✅ getInfo result:', { name, age: age.toString() })
+        } catch (error) {
+          console.error('❌ getInfo failed:', error)
+          showStatus(
+            'readResults',
+            `❌ Failed to get info: ${error.message}`,
+            'error'
+          )
+        }
+      }
+
+      // Get events
+      async function getEvents() {
+        try {
+          if (!contract) {
+            showStatus(
+              'eventLogs',
+              '❌ Please load the contract first',
+              'error'
+            )
+            return
+          }
+
+          showStatus('eventLogs', '🔍 Loading events...', 'loading')
+
+          // Get Instructor events
+          const filter = contract.filters.Instructor()
+          const events = await contract.queryFilter(filter)
+
+          if (events.length === 0) {
+            showStatus('eventLogs', '📭 No Instructor events found', 'warning')
+            return
+          }
+
+          let eventHtml = `<h4>📊 Found ${events.length} Instructor Event(s):</h4>`
+
+          events.forEach((event, index) => {
+            const { name, age } = event.args
+            eventHtml += `
+                        <div class="event-item">
+                            <strong>Event #${index + 1}</strong><br>
+                            <strong>Name:</strong> "${name}"<br>
+                            <strong>Age:</strong> ${age.toString()}<br>
+                            <strong>Block:</strong> ${event.blockNumber}<br>
+                            <strong>TX Hash:</strong> <span class="tx-hash">${
+                              event.transactionHash
+                            }</span>
+                        </div>
+                    `
+          })
+
+          showStatus('eventLogs', eventHtml, 'success')
+          console.log('✅ Events loaded:', events)
+        } catch (error) {
+          console.error('❌ Get events failed:', error)
+          showStatus(
+            'eventLogs',
+            `❌ Failed to load events: ${error.message}`,
+            'error'
+          )
+        }
+      }
+
+      // Clear event logs
+      function clearEventLogs() {
+        hideStatus('eventLogs')
+      }
+
+      // Get network info
+      async function getNetworkInfo() {
+        try {
+          if (!provider || !userAccount) {
+            showStatus(
+              'networkInfo',
+              '❌ Please connect your wallet first',
+              'error'
+            )
+            return
+          }
+
+          showStatus(
+            'networkInfo',
+            '🔍 Loading network information...',
+            'loading'
+          )
+
+          const [network, balance, blockNumber, feeData] = await Promise.all([
+            provider.getNetwork(),
+            provider.getBalance(userAccount),
+            provider.getBlockNumber(),
+            provider.getFeeData()
+          ])
+
+          const networkHtml = `
+                    <div class="network-info">
+                        <div class="network-item">
+                            <strong>Network</strong>
+                            ${network.name || 'Unknown'}
+                        </div>
+                        <div class="network-item">
+                            <strong>Chain ID</strong>
+                            ${network.chainId.toString()}
+                        </div>
+                        <div class="network-item">
+                            <strong>Balance</strong>
+                            ${parseFloat(ethers.formatEther(balance)).toFixed(
+                              4
+                            )} ETH
+                        </div>
+                        <div class="network-item">
+                            <strong>Latest Block</strong>
+                            ${blockNumber.toString()}
+                        </div>
+                        <div class="network-item">
+                            <strong>Gas Price</strong>
+                            ${parseFloat(
+                              ethers.formatUnits(feeData.gasPrice || 0n, 'gwei')
+                            ).toFixed(2)} Gwei
+                        </div>
+                    </div>
+                `
+
+          showStatus('networkInfo', networkHtml, 'success')
+          console.log('✅ Network info loaded:', {
+            network,
+            balance,
+            blockNumber,
+            feeData
+          })
+        } catch (error) {
+          console.error('❌ Get network info failed:', error)
+          showStatus(
+            'networkInfo',
+            `❌ Failed to load network info: ${error.message}`,
+            'error'
+          )
+        }
+      }
+
+      // Event listeners for wallet events
+      function setupEventListeners() {
+        if (window.ethereum) {
+          window.ethereum.on('accountsChanged', (accounts) => {
+            if (accounts.length === 0) {
+              showStatus('walletStatus', '🔒 Wallet disconnected', 'warning')
+              provider = null
+              signer = null
+              contract = null
+              userAccount = null
+            } else {
+              location.reload()
+            }
+          })
+
+          window.ethereum.on('chainChanged', () => {
+            location.reload()
+          })
+        }
+      }
+
+      // Initialize app
+      async function initApp() {
+        console.log('🚀 Initializing InfoContract DApp...')
+
+        // Load ABI on startup
+        await loadABI()
+
+        // Setup event listeners
+        setupEventListeners()
+
+        console.log('✅ App initialized successfully')
+      }
+
+      // Start the app when page loads
+      window.addEventListener('load', initApp)
+    </script>
+  </body>
+</html>
