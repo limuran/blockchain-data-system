@@ -14,16 +14,91 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     data: '用户注册信息: 姓名:张三 邮箱:zhangsan@example.com 时间:2025-01-15 User info: John john@example.com'
   });
 
-  // 兼容多种可能的ABI格式
-  const DATA_STORAGE_ABIS = [
-    // 标准函数签名格式
-    [
-      'function storeData(string memory data, string memory dataType) external',
-      'function getDataCount() external view returns (uint256)',
-      'event DataStored(address indexed user, string data, uint256 timestamp, string indexed dataType, uint256 indexed entryId, uint256 blockNumber, bytes32 dataHash)'
-    ],
-    // 完整ABI格式
-    [
+  // 🔥 使用从Remix复制的完整ABI
+  const getRemixABI = () => {
+    return [
+      {
+        "inputs": [],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {"indexed": true, "internalType": "address", "name": "deployer", "type": "address"},
+          {"indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256"},
+          {"indexed": false, "internalType": "uint256", "name": "blockNumber", "type": "uint256"}
+        ],
+        "name": "ContractDeployed",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {"indexed": true, "internalType": "address", "name": "user", "type": "address"},
+          {"indexed": false, "internalType": "string", "name": "data", "type": "string"},
+          {"indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256"},
+          {"indexed": true, "internalType": "string", "name": "dataType", "type": "string"},
+          {"indexed": true, "internalType": "uint256", "name": "entryId", "type": "uint256"},
+          {"indexed": false, "internalType": "uint256", "name": "blockNumber", "type": "uint256"},
+          {"indexed": false, "internalType": "bytes32", "name": "dataHash", "type": "bytes32"}
+        ],
+        "name": "DataStored",
+        "type": "event"
+      },
+      {
+        "inputs": [
+          {"internalType": "bytes32", "name": "dataHash", "type": "bytes32"}
+        ],
+        "name": "dataHashExists",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "name": "dataEntries",
+        "outputs": [
+          {"internalType": "address", "name": "user", "type": "address"},
+          {"internalType": "string", "name": "data", "type": "string"},
+          {"internalType": "uint256", "name": "timestamp", "type": "uint256"},
+          {"internalType": "string", "name": "dataType", "type": "string"},
+          {"internalType": "uint256", "name": "blockNumber", "type": "uint256"},
+          {"internalType": "bytes32", "name": "dataHash", "type": "bytes32"}
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {"internalType": "string", "name": "dataType", "type": "string"}
+        ],
+        "name": "getDataByType",
+        "outputs": [
+          {
+            "components": [
+              {"internalType": "address", "name": "user", "type": "address"},
+              {"internalType": "string", "name": "data", "type": "string"},
+              {"internalType": "uint256", "name": "timestamp", "type": "uint256"},
+              {"internalType": "string", "name": "dataType", "type": "string"},
+              {"internalType": "uint256", "name": "blockNumber", "type": "uint256"},
+              {"internalType": "bytes32", "name": "dataHash", "type": "bytes32"}
+            ],
+            "internalType": "struct DataStorage.DataEntry[]",
+            "name": "",
+            "type": "tuple[]"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "getDataCount",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+      },
       {
         "inputs": [
           {"internalType": "string", "name": "data", "type": "string"},
@@ -33,16 +108,9 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "getDataCount",
-        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function"
       }
-    ]
-  ];
+    ];
+  };
 
   // 改进的合约验证
   useEffect(() => {
@@ -68,97 +136,66 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
           return;
         }
         
-        // 尝试多种ABI格式验证
-        let validationSuccess = false;
-        let dataCount = 0;
+        console.log('🔍 开始验证合约:', contractAddress);
         
-        for (const abi of DATA_STORAGE_ABIS) {
+        // 使用Remix兼容的ABI
+        try {
+          const contract = new ethers.Contract(contractAddress, getRemixABI(), provider);
+          
+          // 尝试调用getDataCount
+          const dataCount = await contract.getDataCount();
+          console.log('✅ getDataCount调用成功:', Number(dataCount));
+          
+          // 尝试获取所有者信息
+          let ownerInfo = '';
           try {
-            const contract = new ethers.Contract(contractAddress, abi, provider);
-            
-            // 尝试调用getDataCount函数
-            const result = await contract.getDataCount();
-            dataCount = Number(result);
-            validationSuccess = true;
-            console.log('✅ 合约验证成功，使用ABI索引:', DATA_STORAGE_ABIS.indexOf(abi));
-            break;
-          } catch (abiError) {
-            console.log('ABI验证失败:', abiError.message);
-            continue;
+            const owner = await contract.owner();
+            ownerInfo = ` (所有者: ${owner.slice(0,6)}...${owner.slice(-4)})`;
+          } catch (e) {
+            console.log('无法获取所有者信息');
           }
-        }
-        
-        if (validationSuccess) {
+          
           setContractInfo({
             isValid: true,
-            totalDataCount: dataCount,
-            address: contractAddress
+            totalDataCount: Number(dataCount),
+            address: contractAddress,
+            ownerInfo
           });
-        } else {
-          // 如果所有ABI都失败，尝试检查合约是否有我们期望的函数
+        } catch (contractError) {
+          console.error('合约调用失败:', contractError);
+          
+          // 尝试更基础的验证
           try {
-            // 尝试直接调用，看错误信息
-            const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABIS[0], provider);
-            await contract.getDataCount.staticCall();
-          } catch (detailError) {
-            console.error('详细错误:', detailError);
+            // 检查合约是否有预期的函数选择器
+            const iface = new ethers.Interface(getRemixABI());
+            const getDataCountSelector = iface.getFunction('getDataCount').selector;
+            console.log('预期的getDataCount选择器:', getDataCountSelector);
+            
             setContractInfo({ 
               isValid: false, 
-              error: `合约验证失败: ${detailError.message}` 
+              error: `合约验证失败: ${contractError.reason || contractError.message}` 
+            });
+          } catch (e) {
+            setContractInfo({ 
+              isValid: false, 
+              error: '合约ABI不匹配或函数不存在' 
             });
           }
         }
         
       } catch (e) {
-        console.error('合约验证错误:', e);
+        console.error('网络错误:', e);
         setContractInfo({ 
           isValid: false, 
-          error: '网络错误: ' + e.message 
+          error: '网络连接失败: ' + e.message 
         });
       }
     };
 
     // 防抖处理
-    const debounceTimer = setTimeout(checkContract, 800);
+    const debounceTimer = setTimeout(checkContract, 1000);
     return () => clearTimeout(debounceTimer);
   }, [contractAddress]);
-
-  const handleDeploy = async () => {
-    if (!wallet.address) {
-      showToast('请先连接钱包', 'error');
-      return;
-    }
-
-    showToast('⚠️ 前端部署功能是模拟的，请使用Remix部署真实合约', 'warning');
-    
-    setDeploying(true);
-    try {
-      showProgress('模拟部署过程...');
-      updateProgress(1);
-      
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      updateProgress(2);
-      
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      updateProgress(3);
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      updateProgress(4);
-
-      // 生成一个测试地址
-      const mockAddress = '0x' + Array.from({length: 40}, () => 
-        Math.floor(Math.random() * 16).toString(16)).join('');
-
-      setContractAddress(mockAddress);
-      
-      setTimeout(() => {
-        hideProgress();
-        showToast('⚠️ 这是模拟地址，请使用Remix部署真实合约！', 'warning');
-      }, 500);
-    } finally {
-      setDeploying(false);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -174,7 +211,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     }
 
     if (!contractInfo?.isValid) {
-      showToast('请输入有效的DataStorage合约地址', 'error');
+      showToast('请等待合约验证完成', 'error');
       return;
     }
 
@@ -186,13 +223,18 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       
-      // 使用第一个验证成功的ABI
-      const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABIS[0], signer);
+      // 使用验证成功的ABI
+      const contract = new ethers.Contract(contractAddress, getRemixABI(), signer);
 
       updateProgress(2);
 
+      console.log('🚀 准备调用storeData函数');
+      console.log('数据:', form.data);
+      console.log('类型:', form.dataType);
+
       // 估算Gas
       const gasEstimate = await contract.storeData.estimateGas(form.data, form.dataType);
+      console.log('💰 Gas估算:', gasEstimate.toString());
       
       updateProgress(3);
 
@@ -200,8 +242,12 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       const tx = await contract.storeData(form.data, form.dataType, {
         gasLimit: gasEstimate * 120n / 100n // 增加20%缓冲
       });
+      
+      console.log('📤 交易已发送:', tx.hash);
 
       const receipt = await tx.wait();
+      console.log('✅ 交易确认:', receipt);
+      
       updateProgress(4);
 
       addRecord({
@@ -227,6 +273,10 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     }
   };
 
+  const handleDeploy = () => {
+    showToast('💡 请在Remix中部署真实的DataStorage合约', 'info');
+  };
+
   return (
     <div className="bg-green-50 border border-green-200 rounded-xl p-6">
       <div className="flex items-center mb-4">
@@ -248,17 +298,14 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
               value={contractAddress}
               onChange={(e) => setContractAddress(e.target.value)}
               className="flex-1 p-3 border-2 border-gray-300 rounded-lg focus:border-green-500 outline-none font-mono text-sm"
-              placeholder="0x... (粘贴你从Remix部署的DataStorage合约地址)"
+              placeholder="0xcD6a42782d230D7c13A74ddec5dD140e55499Df9 (你的新合约地址)"
             />
             <button
               type="button"
               onClick={handleDeploy}
-              disabled={deploying}
-              className={`bg-orange-500 text-white px-6 py-3 rounded-lg font-semibold transition-all ${
-                deploying ? 'opacity-50' : 'hover:bg-orange-600'
-              }`}
+              className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600"
             >
-              {deploying ? '模拟中...' : '🧪 模拟'}
+              💡 Remix部署
             </button>
           </div>
 
@@ -271,10 +318,10 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
               ) : contractInfo.isValid ? (
                 <div className="p-3 bg-green-100 border border-green-300 rounded-lg">
                   <div className="text-sm text-green-700">
-                    <p>✅ 合约验证成功</p>
+                    <p>✅ 合约验证成功{contractInfo.ownerInfo}</p>
                     <p>📊 已存储数据: {contractInfo.totalDataCount} 条</p>
                     <p className="text-xs text-green-600 mt-1">
-                      💡 现在可以写入数据了！
+                      🎉 可以开始存储数据了！
                     </p>
                   </div>
                 </div>
@@ -282,10 +329,11 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
                 <div className="p-3 bg-red-100 border border-red-300 rounded-lg">
                   <p className="text-sm text-red-700">❌ {contractInfo.error}</p>
                   <div className="mt-2 text-xs text-red-600">
-                    <p>💡 可能的解决方案:</p>
-                    <p>1. 确认在Remix中部署的是完整的DataStorage.sol合约</p>
-                    <p>2. 检查MetaMask连接的是Sepolia测试网</p>
-                    <p>3. 尝试重新部署合约或检查合约地址是否正确</p>
+                    <p>🔧 故障排除:</p>
+                    <p>1. 确认使用的是DataStorage.sol合约代码</p>
+                    <p>2. 检查MetaMask连接的网络(应为Sepolia)</p>
+                    <p>3. 验证合约地址复制正确</p>
+                    <p>4. 查看浏览器控制台的详细错误</p>
                   </div>
                 </div>
               )}
@@ -335,13 +383,13 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
           {loading ? '写入中...' : '📝 写入合约数据'}
         </button>
         
-        <div className="mt-4 bg-green-100 border border-green-300 rounded-lg p-4">
-          <h4 className="font-semibold text-green-900 mb-2">🔧 调试信息</h4>
-          <div className="text-sm text-green-800 space-y-1">
-            <p>• 🌐 确保MetaMask连接到Sepolia测试网</p>
-            <p>• 📍 确认合约地址来自Remix部署的DataStorage.sol</p>
-            <p>• 🔍 检查浏览器控制台的详细错误信息</p>
-            <p>• 💡 如果问题持续，可以在Remix中验证合约函数</p>
+        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h4 className="font-semibold text-blue-900 mb-2">📋 最新信息</h4>
+          <div className="text-sm text-blue-800 space-y-1">
+            <p>• 🆕 新合约地址: 0xcD6a42782d230D7c13A74ddec5dD140e55499Df9</p>
+            <p>• 📍 部署区块: Block 13 (startBlock用这个)</p>
+            <p>• 🔧 使用Solidity 0.8.19编译</p>
+            <p>• ✅ ABI已更新为Remix兼容格式</p>
           </div>
         </div>
       </div>
