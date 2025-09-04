@@ -1,0 +1,42 @@
+type DataEntry @entity {
+  id: ID!
+  user: User!
+  data: String!
+  timestamp: BigInt!
+  dataType: DataType!
+  entryId: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+  gasUsed: BigInt!
+}
+
+type User @entity {
+  id: ID! # address
+  address: Bytes!
+  dataCount: BigInt!
+  firstDataTimestamp: BigInt!
+  dataEntries: [DataEntry!]! @derivedFrom(field: "user")
+}
+
+type DataType @entity {
+  id: ID! # dataType string
+  name: String!
+  count: BigInt!
+  entries: [DataEntry!]! @derivedFrom(field: "dataType")
+}
+
+type Stats @entity {
+  id: ID! # "global"
+  totalEntries: BigInt!
+  totalUsers: BigInt!
+  totalDataTypes: BigInt!
+  lastUpdated: BigInt!
+}
+
+type DailyStats @entity {
+  id: ID! # YYYY-MM-DD
+  date: String!
+  entriesCount: BigInt!
+  newUsers: BigInt!
+  totalGasUsed: BigInt!
+}

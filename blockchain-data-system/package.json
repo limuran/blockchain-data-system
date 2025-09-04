@@ -1,0 +1,56 @@
+{
+  "name": "blockchain-data-dapp",
+  "version": "1.0.0",
+  "description": "区块链数据上链系统 - React + Webpack架构",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "start": "webpack serve --mode development --open",
+    "deploy": "npm run build && gh-pages -d dist"
+  },
+  "dependencies": {
+    "@apollo/client": "^3.8.0",
+    "axios": "^1.5.0",
+    "bignumber.js": "^9.1.1",
+    "clsx": "^2.0.0",
+    "ethers": "^6.7.1",
+    "graphql": "^16.8.0",
+    "lucide-react": "^0.263.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.4.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.22.0",
+    "@babel/preset-env": "^7.22.0",
+    "@babel/preset-react": "^7.22.0",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "autoprefixer": "^10.4.0",
+    "babel-loader": "^9.1.0",
+    "crypto-browserify": "^3.12.1",
+    "css-loader": "^6.8.0",
+    "dotenv-webpack": "^8.0.1",
+    "gh-pages": "^6.0.0",
+    "hardhat": "^3.0.4",
+    "html-webpack-plugin": "^5.5.0",
+    "postcss": "^8.4.0",
+    "postcss-loader": "^7.3.0",
+    "stream-browserify": "^3.0.0",
+    "style-loader": "^3.3.0",
+    "tailwindcss": "^3.3.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^4.15.0"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "react",
+    "web3",
+    "the-graph",
+    "smart-contracts"
+  ],
+  "author": "limuran",
+  "license": "MIT"
+}
