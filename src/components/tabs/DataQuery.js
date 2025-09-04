@@ -133,7 +133,7 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
       showProgress('执行 The Graph 查询...');
       updateProgress(1);
 
-      // 修复子图端点URL
+      // 修复子图端点URL - 您需要替换为实际的子图URL
       const endpoint = process.env.REACT_APP_GRAPH_API_URL || 
         'https://api.studio.thegraph.com/query/YOUR_QUERY_ID/usdt-data-tracker/version/latest';
       
@@ -148,6 +148,10 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
         variables.dataType = form.dataType;
       }
 
+      console.log('GraphQL Query:', form.graphqlQuery);
+      console.log('Variables:', variables);
+      console.log('Endpoint:', endpoint);
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,6 +163,8 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
 
       updateProgress(3);
       const result = await response.json();
+      
+      console.log('GraphQL Response:', result);
       
       if (result.errors) {
         throw new Error('GraphQL错误: ' + result.errors.map(e => e.message).join(', '));
@@ -174,9 +180,43 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
     } catch (error) {
       hideProgress();
       showToast('The Graph查询失败: ' + error.message, 'error');
+      console.error('GraphQL Error Details:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // 新增：诊断查询函数
+  const runDiagnosticQuery = async () => {
+    const diagnosticQuery = `
+      query DiagnosticQuery {
+        _meta {
+          block {
+            number
+            timestamp
+          }
+          deployment
+        }
+        dataStorageContracts {
+          id
+          totalEntries
+          deploymentBlock
+          deploymentTime
+        }
+        users(first: 5) {
+          id
+          totalEntries
+        }
+        dataEntries(first: 1) {
+          id
+          userAddress
+          data
+        }
+      }
+    `;
+    
+    setForm(prev => ({ ...prev, graphqlQuery: diagnosticQuery }));
+    showToast('🔧 运行诊断查询...', 'info');
   };
 
   const loadTemplate = (templateKey) => {
@@ -281,6 +321,12 @@ const DataQuery = ({ showToast, showProgress, updateProgress, hideProgress }) =>
                   className="bg-purple-100 hover:bg-purple-200 text-purple-700 py-2 px-3 rounded-lg text-sm font-medium"
                 >
                   🏷️ 按类型查询
+                </button>
+                <button
+                  onClick={runDiagnosticQuery}
+                  className="col-span-2 bg-red-100 hover:bg-red-200 text-red-700 py-2 px-3 rounded-lg text-sm font-medium"
+                >
+                  🔧 诊断查询 (检查子图状态)
                 </button>
               </div>
             </div>
