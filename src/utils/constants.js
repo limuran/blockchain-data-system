@@ -67,13 +67,22 @@ export const CONTRACT_ABIS = {
     'function name() external view returns (string)',
     'event Transfer(address indexed from, address indexed to, uint256 value)'
   ],
+  // 简化的DataStorage ABI，只包含基本函数
   DATA_STORAGE: [
-    'function storeData(string memory data, string memory dataType) external',
+    'function storeData(string data, string dataType) external',
     'function getDataCount() external view returns (uint256)',
-    'function getUserData(address user) external view returns (tuple(address user, string data, uint256 timestamp, string dataType, uint256 blockNumber, bytes32 dataHash)[])',
-    'function getLatestData(uint256 count) external view returns (tuple(address user, string data, uint256 timestamp, string dataType, uint256 blockNumber, bytes32 dataHash)[])',
-    'function getDataByType(string memory dataType) external view returns (tuple(address user, string data, uint256 timestamp, string dataType, uint256 blockNumber, bytes32 dataHash)[])',
-    'event DataStored(address indexed user, string data, uint256 timestamp, string indexed dataType, uint256 indexed entryId, uint256 blockNumber, bytes32 dataHash)'
+    'function getUserData(address user) external view',
+    'function getLatestData(uint256 count) external view', 
+    'function getDataByType(string dataType) external view',
+    'function owner() external view returns (address)',
+    'event DataStored(address indexed user, string data, uint256 timestamp, string indexed dataType, uint256 indexed entryId, uint256 blockNumber, bytes32 dataHash)',
+    'event ContractDeployed(address indexed deployer, uint256 timestamp, uint256 blockNumber)'
+  ],
+  // Remix兼容的ABI格式
+  DATA_STORAGE_REMIX: [
+    'function storeData(string,string)',
+    'function getDataCount() view returns (uint256)', 
+    'function owner() view returns (address)'
   ]
 };
 
