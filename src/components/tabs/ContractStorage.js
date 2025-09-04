@@ -13,42 +13,103 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     data: '测试数据: 这是一条中文测试数据 Hello World 2025-01-15'
   });
 
-  // 🎯 超级简化的ABI - 只要能调用就行
-  const SIMPLE_ABI = [
-    'function storeData(string,string) payable',
-    'function getDataCount() view returns (uint256)'
+  // 🎯 与Remix完全匹配的简单ABI
+  const REMIX_COMPATIBLE_ABI = [
+    'function storeData(string,string)',
+    'function getDataCount() view returns (uint256)',
+    'function owner() view returns (address)'
   ];
 
-  // 简化的合约检查
+  // 改进的合约验证 - 直接调用已知正常的函数
   useEffect(() => {
-    const checkContract = async () => {
-      if (!contractAddress || !ethers.isAddress(contractAddress)) {
+    const verifyContract = async () => {
+      if (!contractAddress || !ethers.isAddress(contractAddress) || !window.ethereum) {
         setContractInfo(null);
         return;
       }
 
+      console.log('🔍 验证合约:', contractAddress);
+
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
-        const code = await provider.getCode(contractAddress);
         
+        // 检查网络
+        const network = await provider.getNetwork();
+        console.log('🌐 当前网络:', network.name, '链ID:', network.chainId);
+        
+        // 检查是否是合约
+        const code = await provider.getCode(contractAddress);
         if (code === '0x') {
-          setContractInfo({ isValid: false, error: '不是智能合约地址' });
-        } else {
-          // 🎯 直接假设是有效合约，不做复杂验证
+          setContractInfo({ isValid: false, error: '该地址不是智能合约' });
+          return;
+        }
+
+        console.log('✅ 确认是合约，代码长度:', code.length);
+
+        // 🎯 关键修复：使用低级调用避免ABI解析问题
+        try {
+          const contract = new ethers.Contract(contractAddress, REMIX_COMPATIBLE_ABI, provider);
+          
+          // 方法1: 使用staticCall直接调用
+          const dataCountResult = await contract.getDataCount.staticCall();
+          console.log('📊 数据计数调用成功:', Number(dataCountResult));
+          
+          // 方法2: 检查owner函数
+          const ownerResult = await contract.owner.staticCall();
+          console.log('👤 所有者调用成功:', ownerResult);
+          
           setContractInfo({
             isValid: true,
+            totalDataCount: Number(dataCountResult),
+            owner: ownerResult,
             address: contractAddress,
-            totalDataCount: '未知',
-            note: '已跳过复杂验证，直接尝试调用'
+            network: network.name
           });
+          
+        } catch (callError) {
+          console.error('⚠️ 合约调用失败:', callError);
+          
+          // 🔧 备选方案：使用原始调用
+          try {
+            const getDataCountSelector = '0x17d70f7c'; // getDataCount()的函数选择器
+            const result = await provider.call({
+              to: contractAddress,
+              data: getDataCountSelector
+            });
+            
+            if (result && result !== '0x') {
+              const decodedResult = ethers.AbiCoder.defaultAbiCoder().decode(['uint256'], result);
+              console.log('🛠️ 原始调用成功:', Number(decodedResult[0]));
+              
+              setContractInfo({
+                isValid: true,
+                totalDataCount: Number(decodedResult[0]),
+                address: contractAddress,
+                method: '原始调用'
+              });
+            } else {
+              throw new Error('原始调用也返回空值');
+            }
+          } catch (rawCallError) {
+            console.error('❌ 原始调用也失败:', rawCallError);
+            setContractInfo({
+              isValid: false,
+              error: '无法调用合约函数，可能网络不匹配或合约有问题'
+            });
+          }
         }
-      } catch (e) {
-        setContractInfo({ isValid: false, error: '网络错误' });
+
+      } catch (networkError) {
+        console.error('🌐 网络错误:', networkError);
+        setContractInfo({
+          isValid: false,
+          error: '网络连接失败: ' + networkError.message
+        });
       }
     };
 
     if (contractAddress) {
-      const timer = setTimeout(checkContract, 300);
+      const timer = setTimeout(verifyContract, 500);
       return () => clearTimeout(timer);
     }
   }, [contractAddress]);
@@ -66,9 +127,10 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       return;
     }
 
+    // 🎯 即使验证失败也允许尝试调用
     setLoading(true);
     try {
-      showProgress('尝试写入合约数据...');
+      showProgress('尝试调用storeData函数...');
       updateProgress(1);
 
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -76,21 +138,20 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
 
       updateProgress(2);
 
-      // 🚀 直接尝试调用，不预先验证
-      const contract = new ethers.Contract(contractAddress, SIMPLE_ABI, signer);
-      
-      console.log('📝 调用storeData函数...');
-      console.log('数据:', form.data);
-      console.log('类型:', form.dataType);
+      console.log('🚀 准备调用storeData...');
+      console.log('📝 数据:', form.data);
+      console.log('🏷️ 类型:', form.dataType);
+
+      const contract = new ethers.Contract(contractAddress, REMIX_COMPATIBLE_ABI, signer);
 
       updateProgress(3);
 
-      // 直接发送交易
+      // 直接调用，让合约自己报错
       const tx = await contract.storeData(form.data, form.dataType);
-      console.log('📤 交易发送成功:', tx.hash);
+      console.log('📤 交易已发送:', tx.hash);
 
       const receipt = await tx.wait();
-      console.log('✅ 交易确认:', receipt);
+      console.log('✅ 交易确认完成:', receipt);
 
       updateProgress(4);
 
@@ -106,24 +167,23 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
 
       setTimeout(() => {
         hideProgress();
-        showToast('🎉 数据写入成功！合约调用正常！', 'success');
+        showToast('🎉 数据写入合约成功！你的合约工作正常！', 'success');
       }, 500);
 
     } catch (error) {
       hideProgress();
-      console.error('❌ 详细错误:', error);
+      console.error('❌ storeData调用失败:', error);
       
-      // 友好的错误提示
-      let errorMsg = '合约调用失败';
+      let friendlyMessage = '合约调用失败';
       if (error.message.includes('user rejected')) {
-        errorMsg = '用户取消了交易';
+        friendlyMessage = '用户取消了交易';
       } else if (error.message.includes('insufficient funds')) {
-        errorMsg = 'ETH余额不足支付Gas费用';
+        friendlyMessage = 'ETH余额不足支付Gas费用';
       } else if (error.message.includes('execution reverted')) {
-        errorMsg = '合约执行被拒绝，可能是函数不存在或参数错误';
+        friendlyMessage = '合约执行被拒绝，请检查函数参数';
       }
       
-      showToast(errorMsg, 'error');
+      showToast(friendlyMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -136,7 +196,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
         <div>
           <h3 className="text-lg font-bold text-green-900">智能合约数据存储</h3>
           <p className="text-green-700 text-sm">
-            简化版本: 直接调用合约，无复杂验证
+            测试版: 直接调用你的Remix合约
           </p>
         </div>
       </div>
@@ -149,18 +209,26 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
             value={contractAddress}
             onChange={(e) => setContractAddress(e.target.value)}
             className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-green-500 outline-none font-mono text-sm"
-            placeholder="0xcD6a42782d230D7c13A74ddec5dD140e55499Df9 (粘贴你的合约地址)"
+            placeholder="0xcD6a42782d230D7c13A74ddec5dD140e55499Df9"
           />
           
           {contractInfo && (
             <div className={`mt-2 p-3 rounded-lg ${
-              contractInfo.isValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              contractInfo.isValid ? 'bg-green-100 border-green-300' : 'bg-yellow-100 border-yellow-300'
             }`}>
-              <p className="text-sm">
-                {contractInfo.isValid ? '✅ 准备就绪，可以尝试调用' : `❌ ${contractInfo.error}`}
-              </p>
-              {contractInfo.note && (
-                <p className="text-xs mt-1">{contractInfo.note}</p>
+              {contractInfo.isValid ? (
+                <div className="text-sm text-green-700">
+                  <p>✅ 合约连接成功 {contractInfo.method && `(${contractInfo.method})`}</p>
+                  <p>📊 当前数据数量: {contractInfo.totalDataCount}</p>
+                  {contractInfo.owner && (
+                    <p>👤 所有者: {contractInfo.owner.slice(0,6)}...{contractInfo.owner.slice(-4)}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-yellow-700">
+                  <p>⚠️ 验证问题: {contractInfo.error}</p>
+                  <p className="text-xs mt-1">💡 仍然可以尝试调用storeData函数</p>
+                </div>
               )}
             </div>
           )}
@@ -199,16 +267,17 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
               : 'hover:shadow-lg hover:-translate-y-1'
           }`}
         >
-          {loading ? '🔄 调用中...' : '🚀 直接调用合约'}
+          {loading ? '🔄 调用中...' : '🚀 尝试调用 storeData'}
         </button>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="font-semibold text-blue-900 mb-2">💡 简化说明</h4>
+          <h4 className="font-semibold text-blue-900 mb-2">🎯 当前状态</h4>
           <div className="text-sm text-blue-800 space-y-1">
-            <p>• ⚡ 跳过复杂的ABI验证，直接尝试调用</p>
-            <p>• 🎯 如果你的合约有storeData函数，就会成功</p>
-            <p>• 📊 成功后会在交易记录中显示</p>
-            <p>• 🔍 可以用区块浏览器验证交易</p>
+            <p>• ✅ 你的合约在Remix中工作正常</p>
+            <p>• ✅ getDataCount返回0 (初始状态正确)</p>
+            <p>• ✅ owner函数返回部署者地址</p>
+            <p>• 🔄 前端验证问题已绕过，直接尝试调用</p>
+            <p>• 💡 如果storeData成功，说明一切正常！</p>
           </div>
         </div>
       </div>
