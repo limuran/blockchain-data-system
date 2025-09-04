@@ -14,13 +14,37 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     data: '用户注册信息: 姓名:张三 邮箱:zhangsan@example.com 时间:2025-01-15 User info: John john@example.com'
   });
 
-  const DATA_STORAGE_ABI = [
-    'function storeData(string memory data, string memory dataType) external',
-    'function getDataCount() external view returns (uint256)',
-    'event DataStored(address indexed user, string data, uint256 timestamp, string dataType, uint256 indexed entryId, uint256 blockNumber)'
+  // 兼容多种可能的ABI格式
+  const DATA_STORAGE_ABIS = [
+    // 标准函数签名格式
+    [
+      'function storeData(string memory data, string memory dataType) external',
+      'function getDataCount() external view returns (uint256)',
+      'event DataStored(address indexed user, string data, uint256 timestamp, string indexed dataType, uint256 indexed entryId, uint256 blockNumber, bytes32 dataHash)'
+    ],
+    // 完整ABI格式
+    [
+      {
+        "inputs": [
+          {"internalType": "string", "name": "data", "type": "string"},
+          {"internalType": "string", "name": "dataType", "type": "string"}
+        ],
+        "name": "storeData",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "getDataCount",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ]
   ];
 
-  // 检查合约状态的改进版本
+  // 改进的合约验证
   useEffect(() => {
     const checkContract = async () => {
       if (!contractAddress || !window.ethereum) {
@@ -31,7 +55,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
         
-        // 首先检查地址格式
+        // 检查地址格式
         if (!ethers.isAddress(contractAddress)) {
           setContractInfo({ isValid: false, error: '无效的地址格式' });
           return;
@@ -44,36 +68,58 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
           return;
         }
         
-        // 尝试调用合约函数
-        try {
-          const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABI, provider);
-          
-          // 使用静态调用避免状态改变
-          const dataCount = await contract.getDataCount.staticCall();
-          
+        // 尝试多种ABI格式验证
+        let validationSuccess = false;
+        let dataCount = 0;
+        
+        for (const abi of DATA_STORAGE_ABIS) {
+          try {
+            const contract = new ethers.Contract(contractAddress, abi, provider);
+            
+            // 尝试调用getDataCount函数
+            const result = await contract.getDataCount();
+            dataCount = Number(result);
+            validationSuccess = true;
+            console.log('✅ 合约验证成功，使用ABI索引:', DATA_STORAGE_ABIS.indexOf(abi));
+            break;
+          } catch (abiError) {
+            console.log('ABI验证失败:', abiError.message);
+            continue;
+          }
+        }
+        
+        if (validationSuccess) {
           setContractInfo({
             isValid: true,
-            totalDataCount: Number(dataCount),
+            totalDataCount: dataCount,
             address: contractAddress
           });
-        } catch (contractError) {
-          console.log('合约调用失败:', contractError);
-          setContractInfo({ 
-            isValid: false, 
-            error: '合约ABI不匹配，可能不是DataStorage合约' 
-          });
+        } else {
+          // 如果所有ABI都失败，尝试检查合约是否有我们期望的函数
+          try {
+            // 尝试直接调用，看错误信息
+            const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABIS[0], provider);
+            await contract.getDataCount.staticCall();
+          } catch (detailError) {
+            console.error('详细错误:', detailError);
+            setContractInfo({ 
+              isValid: false, 
+              error: `合约验证失败: ${detailError.message}` 
+            });
+          }
         }
+        
       } catch (e) {
         console.error('合约验证错误:', e);
         setContractInfo({ 
           isValid: false, 
-          error: '网络错误或合约验证失败' 
+          error: '网络错误: ' + e.message 
         });
       }
     };
 
-    // 防抖处理，避免频繁调用
-    const debounceTimer = setTimeout(checkContract, 500);
+    // 防抖处理
+    const debounceTimer = setTimeout(checkContract, 800);
     return () => clearTimeout(debounceTimer);
   }, [contractAddress]);
 
@@ -83,12 +129,13 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       return;
     }
 
+    showToast('⚠️ 前端部署功能是模拟的，请使用Remix部署真实合约', 'warning');
+    
     setDeploying(true);
     try {
-      showProgress('部署DataStorage合约到 ' + (wallet.chainName || '当前网络') + '...');
+      showProgress('模拟部署过程...');
       updateProgress(1);
-
-      // 模拟部署过程 - 在实际使用中，这里需要真实的合约字节码
+      
       await new Promise(resolve => setTimeout(resolve, 1500));
       updateProgress(2);
       
@@ -98,7 +145,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       await new Promise(resolve => setTimeout(resolve, 1000));
       updateProgress(4);
 
-      // 生成模拟地址 - 实际使用中替换为真实部署
+      // 生成一个测试地址
       const mockAddress = '0x' + Array.from({length: 40}, () => 
         Math.floor(Math.random() * 16).toString(16)).join('');
 
@@ -106,11 +153,8 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
       
       setTimeout(() => {
         hideProgress();
-        showToast('✅ 合约部署成功！', 'success');
+        showToast('⚠️ 这是模拟地址，请使用Remix部署真实合约！', 'warning');
       }, 500);
-    } catch (error) {
-      hideProgress();
-      showToast('部署失败: ' + error.message, 'error');
     } finally {
       setDeploying(false);
     }
@@ -125,7 +169,7 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
     }
 
     if (!contractAddress) {
-      showToast('请先部署合约或输入合约地址', 'error');
+      showToast('请先输入合约地址', 'error');
       return;
     }
 
@@ -141,7 +185,9 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
 
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABI, signer);
+      
+      // 使用第一个验证成功的ABI
+      const contract = new ethers.Contract(contractAddress, DATA_STORAGE_ABIS[0], signer);
 
       updateProgress(2);
 
@@ -202,17 +248,17 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
               value={contractAddress}
               onChange={(e) => setContractAddress(e.target.value)}
               className="flex-1 p-3 border-2 border-gray-300 rounded-lg focus:border-green-500 outline-none font-mono text-sm"
-              placeholder="0x... 或点击部署新合约"
+              placeholder="0x... (粘贴你从Remix部署的DataStorage合约地址)"
             />
             <button
               type="button"
               onClick={handleDeploy}
               disabled={deploying}
-              className={`bg-green-500 text-white px-6 py-3 rounded-lg font-semibold transition-all ${
-                deploying ? 'opacity-50' : 'hover:bg-green-600'
+              className={`bg-orange-500 text-white px-6 py-3 rounded-lg font-semibold transition-all ${
+                deploying ? 'opacity-50' : 'hover:bg-orange-600'
               }`}
             >
-              {deploying ? '部署中...' : '🚀 部署'}
+              {deploying ? '模拟中...' : '🧪 模拟'}
             </button>
           </div>
 
@@ -227,14 +273,20 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
                   <div className="text-sm text-green-700">
                     <p>✅ 合约验证成功</p>
                     <p>📊 已存储数据: {contractInfo.totalDataCount} 条</p>
+                    <p className="text-xs text-green-600 mt-1">
+                      💡 现在可以写入数据了！
+                    </p>
                   </div>
                 </div>
               ) : (
                 <div className="p-3 bg-red-100 border border-red-300 rounded-lg">
                   <p className="text-sm text-red-700">❌ {contractInfo.error}</p>
-                  <p className="text-xs text-red-600 mt-1">
-                    💡 提示: 请确保输入的是有效的DataStorage合约地址
-                  </p>
+                  <div className="mt-2 text-xs text-red-600">
+                    <p>💡 可能的解决方案:</p>
+                    <p>1. 确认在Remix中部署的是完整的DataStorage.sol合约</p>
+                    <p>2. 检查MetaMask连接的是Sepolia测试网</p>
+                    <p>3. 尝试重新部署合约或检查合约地址是否正确</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -284,13 +336,12 @@ const ContractStorage = ({ showToast, showProgress, updateProgress, hideProgress
         </button>
         
         <div className="mt-4 bg-green-100 border border-green-300 rounded-lg p-4">
-          <h4 className="font-semibold text-green-900 mb-2">🎯 使用说明</h4>
+          <h4 className="font-semibold text-green-900 mb-2">🔧 调试信息</h4>
           <div className="text-sm text-green-800 space-y-1">
-            <p>• 🚀 点击"部署"按钮创建新的DataStorage合约</p>
-            <p>• 📍 或者输入已部署的合约地址</p>
-            <p>• ✅ 系统会自动验证合约有效性</p>
-            <p>• 📝 验证通过后即可存储任意字符串数据</p>
-            <p>• 🔍 存储的数据可通过"数据查询"标签页查看</p>
+            <p>• 🌐 确保MetaMask连接到Sepolia测试网</p>
+            <p>• 📍 确认合约地址来自Remix部署的DataStorage.sol</p>
+            <p>• 🔍 检查浏览器控制台的详细错误信息</p>
+            <p>• 💡 如果问题持续，可以在Remix中验证合约函数</p>
           </div>
         </div>
       </div>
