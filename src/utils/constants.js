@@ -27,9 +27,13 @@ export const TRANSACTION_TYPES = {
 
 export const QUERY_TEMPLATES = {
   RECENT_DATA: `query GetRecentData {
-  dataStoreds(first: 10, orderBy: timestamp, orderDirection: desc) {
+  dataEntries(first: 10, orderBy: timestamp, orderDirection: desc) {
     id
-    user
+    user {
+      id
+      totalEntries
+    }
+    userAddress
     data
     dataType
     timestamp
@@ -37,23 +41,59 @@ export const QUERY_TEMPLATES = {
     transactionHash
   }
 }`,
-  USER_TRANSFERS: `query GetUserTransfers($user: String!) {
-  transfers(where: {or: [{from: $user}, {to: $user}]}, first: 10) {
+  USER_TRANSFERS: `query GetUserTransfers($user: Bytes!) {
+  dataEntries(where: {userAddress: $user}, first: 10, orderBy: timestamp, orderDirection: desc) {
     id
-    from
-    to
-    value
+    user {
+      id
+      totalEntries
+    }
+    userAddress
+    data
+    dataType
     timestamp
+    blockNumber
     transactionHash
   }
 }`,
   DATA_BY_TYPE: `query GetDataByType($dataType: String!) {
-  dataStoreds(where: {dataType: $dataType}, first: 10) {
+  dataEntries(where: {dataType: $dataType}, first: 10, orderBy: timestamp, orderDirection: desc) {
     id
-    user
+    user {
+      id
+      totalEntries
+    }
+    userAddress
     data
+    dataType
     timestamp
+    blockNumber
     dataHash
+    transactionHash
+  }
+}`,
+  ALL_USERS: `query GetAllUsers {
+  users(first: 10, orderBy: totalEntries, orderDirection: desc) {
+    id
+    totalEntries
+    firstEntryTime
+    lastEntryTime
+    dataEntries(first: 3) {
+      id
+      data
+      dataType
+      timestamp
+    }
+  }
+}`,
+  CONTRACT_STATS: `query GetContractStats {
+  dataStorageContracts {
+    id
+    totalEntries
+    totalUsers
+    deploymentBlock
+    deploymentTime
+    deployer
   }
 }`
 };
@@ -75,7 +115,7 @@ export const CONTRACT_ABIS = {
     'function getLatestData(uint256 count) external view', 
     'function getDataByType(string dataType) external view',
     'function owner() external view returns (address)',
-    'event DataStored(address indexed user, string data, uint256 timestamp, string indexed dataType, uint256 indexed entryId, uint256 blockNumber, bytes32 dataHash)',
+    'event DataStored(address indexed user, string data, uint256 timestamp, string dataType, uint256 indexed entryId, uint256 blockNumber, bytes32 dataHash)',
     'event ContractDeployed(address indexed deployer, uint256 timestamp, uint256 blockNumber)'
   ],
   // Remix兼容的ABI格式
