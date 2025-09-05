@@ -1,28 +1,22 @@
 import React, { useState } from 'react';
 import EthTransfer from './tabs/EthTransfer';
 import TokenTransfer from './tabs/TokenTransfer';
-import EnhancedTokenTransfer from './tabs/EnhancedTokenTransfer';
 import ContractStorage from './tabs/ContractStorage';
 import DataQuery from './tabs/DataQuery';
 
 const MainContent = ({ showToast, showProgress, updateProgress, hideProgress }) => {
-  const [activeTab, setActiveTab] = useState('enhanced-token');
+  const [activeTab, setActiveTab] = useState('token-transfer');
 
   const tabs = [
     {
-      id: 'enhanced-token',
-      name: '💎 增强代币转账',
-      component: EnhancedTokenTransfer
+      id: 'token-transfer',
+      name: '🪙 代币转账',
+      component: TokenTransfer
     },
     {
       id: 'eth-transfer',
       name: '⚡ ETH转账',
       component: EthTransfer
-    },
-    {
-      id: 'token-transfer',
-      name: '🪙 简单代币转账',
-      component: TokenTransfer
     },
     {
       id: 'contract-storage',
