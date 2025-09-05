@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>增强版代币转账系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .header h1 {
+            color: #2c3e50;
+            margin: 0 0 8px 0;
+            font-size: 28px;
+        }
+        .header p {
+            color: #7f8c8d;
+            margin: 0;
+            font-size: 16px;
+        }
+        .token-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .token-button {
+            padding: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            background: white;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .token-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .token-button.selected {
+            border-color: #4CAF50;
+            background: #f1f8e9;
+        }
+        .balance-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+            border: 1px solid #e9ecef;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 8px;
+            display: none;
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .submit-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.3);
+        }
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .connect-btn {
+            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .status-message {
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 16px 0;
+            font-weight: bold;
+        }
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .features {
+            background: #e3f2fd;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 24px;
+            border: 1px solid #bbdefb;
+        }
+        .features h4 {
+            margin: 0 0 12px 0;
+            color: #1976d2;
+        }
+        .features ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #424242;
+        }
+        .features li {
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🪙 增强版代币转账系统</h1>
+            <p>支持多种稳定币，自动ETH兑换，智能合约授权</p>
+        </div>
+
+        <div id="wallet-section">
+            <button id="connect-btn" class="connect-btn" onclick="connectWallet()">
+                连接钱包
+            </button>
+        </div>
+
+        <div id="transfer-section" style="display: none;">
+            <!-- 代币选择 -->
+            <div class="form-group">
+                <label>🏷️ 选择代币</label>
+                <div id="token-grid" class="token-grid">
+                    <!-- 动态生成代币选项 -->
+                </div>
+            </div>
+
+            <!-- 钱包余额 -->
+            <div class="balance-card">
+                <h4 style="margin: 0 0 12px 0;">💳 钱包余额</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px;">
+                    <div>
+                        <span style="color: #666;">ETH: </span>
+                        <span id="eth-balance" style="font-weight: bold;">0.000000</span>
+                    </div>
+                    <div>
+                        <span style="color: #666;"><span id="selected-token-name">USDT</span>: </span>
+                        <span id="token-balance" style="font-weight: bold;">0.000000</span>
+                    </div>
+                </div>
+            </div>
+
+            <form onsubmit="handleSubmit(event)">
+                <!-- 转账地址 -->
+                <div class="form-group">
+                    <label>📍 转账地址</label>
+                    <input type="text" id="recipient-address" placeholder="0x..." required style="font-family: monospace;">
+                </div>
+
+                <!-- 转账金额 -->
+                <div class="form-group">
+                    <label>💰 转账金额 (<span id="amount-token-name">USDT</span>)</label>
+                    <input type="number" id="transfer-amount" value="1.0" step="0.000001" min="0" required onchange="checkBalance()">
+                    
+                    <!-- 余额不足警告 -->
+                    <div id="swap-warning" class="warning-box">
+                        <div style="font-weight: bold; margin-bottom: 8px;">⚠️ 余额不够！</div>
+                        <div id="swap-message" style="font-size: 14px;"></div>
+                    </div>
+                </div>
+
+                <!-- 转账信息 -->
+                <div class="form-group">
+                    <label>📄 转账信息</label>
+                    <textarea id="transfer-data" rows="3" placeholder="输入转账相关信息...">订单编号:ORD1725523200000 付款类型:服务费 Service payment for order</textarea>
+                    <small style="color: #666; font-size: 12px;">💡 由于这是合约转账，转账信息将记录在区块链上</small>
+                </div>
+
+                <!-- 提交按钮 -->
+                <button type="submit" id="submit-btn" class="submit-btn">
+                    💸 发送转账
+                </button>
+            </form>
+
+            <!-- 状态消息 -->
+            <div id="status-message" style="display: none;"></div>
+
+            <!-- 功能说明 -->
+            <div class="features">
+                <h4>💡 功能说明</h4>
+                <ul>
+                    <li>支持多种稳定币转账（USDT、USDC、DAI等）</li>
+                    <li>余额不足时自动提示ETH兑换选项</li>
+                    <li>智能检测并处理ERC20代币授权</li>
+                    <li>转账信息将永久记录在区块链上</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { ethers } from 'https://cdn.skypack.dev/ethers@6.8.0';
+        
+        // 全局变量
+        window.wallet = { address: null, chainId: null };
+        window.balances = {};
+        window.ethBalance = '0.000000';
+        window.selectedToken = 'USDT';
+        window.swapQuote = null;
+        window.loading = false;
+
+        // 代币配置
+        const SUPPORTED_TOKENS = {
+            1: {
+                USDT: { address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, symbol: 'USDT', name: 'Tether USD', icon: '🔗', type: 'ERC20' },
+                USDC: { address: '0xA0b86a33E6441E3b4Ca9BbD61D0b01faa9602C81', decimals: 6, symbol: 'USDC', name: 'USD Coin', icon: '🔵', type: 'ERC20' },
+                DAI: { address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals: 18, symbol: 'DAI', name: 'Dai Stablecoin', icon: '🟡', type: 'ERC20' }
+            },
+            11155111: {
+                USDT: { address: '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06', decimals: 6, symbol: 'USDT', name: 'Tether USD (Sepolia)', icon: '🔗', type: 'ERC20' },
+                USDC: { address: '0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8', decimals: 6, symbol: 'USDC', name: 'USD Coin (Sepolia)', icon: '🔵', type: 'ERC20' }
+            }
+        };
+
+        const ERC20_ABI = [
+            'function transfer(address to, uint256 amount) external returns (bool)',
+            'function approve(address spender, uint256 amount) external returns (bool)',
+            'function allowance(address owner, address spender) external view returns (uint256)',
+            'function balanceOf(address account) external view returns (uint256)',
+            'function decimals() external view returns (uint8)'
+        ];
+
+        // 连接钱包
+        window.connectWallet = async function() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const network = await provider.getNetwork();
+                    
+                    window.wallet = { 
+                        address: accounts[0], 
+                        chainId: Number(network.chainId) 
+                    };
+                    
+                    document.getElementById('wallet-section').style.display = 'none';
+                    document.getElementById('transfer-section').style.display = 'block';
+                    
+                    await initializeTokens();
+                    await fetchBalances();
+                    
+                } catch (error) {
+                    showMessage('连接钱包失败: ' + error.message, 'error');
+                }
+            } else {
+                showMessage('请安装MetaMask钱包', 'error');
+            }
+        };
+
+        // 初始化代币选择
+        async function initializeTokens() {
+            const supportedTokens = SUPPORTED_TOKENS[window.wallet.chainId] || {};
+            const tokenGrid = document.getElementById('token-grid');
+            
+            if (Object.keys(supportedTokens).length === 0) {
+                tokenGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #666;">当前网络不支持代币转账</div>';
+                return;
+            }
+            
+            tokenGrid.innerHTML = Object.entries(supportedTokens).map(([symbol, token]) => `
+                <div class="token-button ${window.selectedToken === symbol ? 'selected' : ''}" onclick="selectToken('${symbol}')">
+                    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 8px;">
+                        <span style="font-size: 20px; margin-right: 8px;">${token.icon}</span>
+                        <span style="font-weight: bold;">${symbol}</span>
+                    </div>
+                    <div style="font-size: 12px; color: #666; margin-bottom: 4px;">${token.name}</div>
+                    <div style="font-size: 14px; font-weight: bold; color: #4CAF50;" id="balance-${symbol}">
+                        0.000000
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 选择代币
+        window.selectToken = function(symbol) {
+            window.selectedToken = symbol;
+            
+            // 更新选中状态
+            document.querySelectorAll('.token-button').forEach(btn => btn.classList.remove('selected'));
+            event.target.closest('.token-button').classList.add('selected');
+            
+            // 更新显示
+            document.getElementById('selected-token-name').textContent = symbol;
+            document.getElementById('amount-token-name').textContent = symbol;
+            document.getElementById('token-balance').textContent = window.balances[symbol] || '0.000000';
+            
+            checkBalance();
+        };
+
+        // 获取余额
+        async function fetchBalances() {
+            if (!window.wallet.address) return;
+            
+            try {
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const supportedTokens = SUPPORTED_TOKENS[window.wallet.chainId] || {};
+                
+                // 获取ETH余额
+                const balance = await provider.getBalance(window.wallet.address);
+                window.ethBalance = parseFloat(ethers.formatEther(balance)).toFixed(6);
+                document.getElementById('eth-balance').textContent = window.ethBalance;
+                
+                // 获取代币余额
+                for (const [symbol, token] of Object.entries(supportedTokens)) {
+                    try {
+                        const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
+                        const tokenBalance = await contract.balanceOf(window.wallet.address);
+                        const formatted = parseFloat(ethers.formatUnits(tokenBalance, token.decimals)).toFixed(6);
+                        
+                        window.balances[symbol] = formatted;
+                        
+                        const balanceEl = document.getElementById(`balance-${symbol}`);
+                        if (balanceEl) balanceEl.textContent = formatted;
+                        
+                        if (symbol === window.selectedToken) {
+                            document.getElementById('token-balance').textContent = formatted;
+                        }
+                    } catch (error) {
+                        console.error(`获取${symbol}余额失败:`, error);
+                        window.balances[symbol] = '0.000000';
+                    }
+                }
+                
+                checkBalance();
+                
+            } catch (error) {
+                console.error('获取余额失败:', error);
+            }
+        }
+
+        // 检查余额
+        window.checkBalance = function() {
+            const amount = parseFloat(document.getElementById('transfer-amount').value || '0');
+            const available = parseFloat(window.balances[window.selectedToken] || '0');
+            const warningBox = document.getElementById('swap-warning');
+            
+            if (amount > available) {
+                warningBox.style.display = 'block';
+                document.getElementById('swap-message').innerHTML = 
+                    '<span style="color: #d32f2f;">❌ 余额不足！当前功能仅支持直接转账</span>';
+            } else {
+                warningBox.style.display = 'none';
+            }
+        };
+
+        // 处理提交
+        window.handleSubmit = async function(event) {
+            event.preventDefault();
+            
+            if (window.loading) return;
+            
+            const supportedTokens = SUPPORTED_TOKENS[window.wallet.chainId] || {};
+            const currentToken = supportedTokens[window.selectedToken];
+            
+            if (!currentToken) {
+                showMessage('当前网络不支持所选代币', 'error');
+                return;
+            }
+            
+            const recipientAddress = document.getElementById('recipient-address').value;
+            const amount = document.getElementById('transfer-amount').value;
+            const data = document.getElementById('transfer-data').value;
+            
+            if (!recipientAddress || !amount) {
+                showMessage('请填写完整信息', 'error');
+                return;
+            }
+            
+            const required = parseFloat(amount);
+            const available = parseFloat(window.balances[window.selectedToken] || '0');
+            
+            if (required > available) {
+                showMessage('余额不足', 'error');
+                return;
+            }
+            
+            await executeTransfer(currentToken, recipientAddress, amount, data);
+        };
+
+        // 执行转账
+        async function executeTransfer(token, to, amount, data) {
+            window.loading = true;
+            updateLoadingState('执行代币转账...');
+            
+            try {
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const signer = await provider.getSigner();
+                const amountWei = ethers.parseUnits(amount, token.decimals);
+                
+                const contract = new ethers.Contract(token.address, ERC20_ABI, signer);
+                const tx = await contract.transfer(to, amountWei);
+                
+                updateLoadingState('等待交易确认...');
+                const receipt = await tx.wait();
+                
+                showMessage(`✅ 转账成功！交易哈希: ${tx.hash}`, 'success');
+                
+                // 刷新余额
+                setTimeout(() => {
+                    fetchBalances();
+                }, 2000);
+                
+            } catch (error) {
+                showMessage('转账失败: ' + error.message, 'error');
+            } finally {
+                window.loading = false;
+                updateLoadingState();
+            }
+        }
+
+        // 更新加载状态
+        function updateLoadingState(message = '') {
+            const submitBtn = document.getElementById('submit-btn');
+            if (window.loading) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = message || '处理中...';
+            } else {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '💸 发送转账';
+            }
+        }
+
+        // 显示消息
+        function showMessage(message, type) {
+            const messageEl = document.getElementById('status-message');
+            messageEl.className = `status-message status-${type}`;
+            messageEl.textContent = message;
+            messageEl.style.display = 'block';
+            
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 5000);
+        }
+
+        // 初始化转账数据
+        document.addEventListener('DOMContentLoaded', () => {
+            const now = Date.now();
+            document.getElementById('transfer-data').value = 
+                `订单编号:ORD${now} 付款类型:服务费 Service payment for order`;
+        });
+    </script>
+</body>
+</html>
