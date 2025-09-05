@@ -1,4 +1,4 @@
-# Enhanced Token Configuration with Fixed Testnet Support
+// # Enhanced Token Configuration with Fixed Testnet Support
 export const SUPPORTED_TOKENS = {
   // Ethereum Mainnet
   1: {
@@ -93,7 +93,7 @@ export const SUPPORTED_TOKENS = {
       isNative: false
     }
   }
-};
+}
 
 // Network configuration
 export const NETWORK_CONFIG = {
@@ -127,65 +127,67 @@ export const NETWORK_CONFIG = {
     hasUniswap: true,
     swapEnabled: true
   }
-};
+}
 
 // Updated Router addresses
 export const UNISWAP_ROUTER = {
   1: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Mainnet
   56: '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4' // BSC (PancakeSwap)
-};
+}
 
 // Updated Quoter V2 addresses
 export const QUOTER_ADDRESSES = {
   1: '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6',
   56: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997'
-};
+}
 
 // WETH addresses
 export const WETH_ADDRESSES = {
   1: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
   56: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c' // WBNB on BSC
-};
+}
 
 export const getTokensByChainId = (chainId) => {
-  return SUPPORTED_TOKENS[chainId] || {};
-};
+  return SUPPORTED_TOKENS[chainId] || {}
+}
 
 export const getTokenBySymbol = (chainId, symbol) => {
-  const tokens = getTokensByChainId(chainId);
-  return tokens[symbol];
-};
+  const tokens = getTokensByChainId(chainId)
+  return tokens[symbol]
+}
 
 export const getUniswapRouter = (chainId) => {
-  return UNISWAP_ROUTER[chainId];
-};
+  return UNISWAP_ROUTER[chainId]
+}
 
 export const getQuoterAddress = (chainId) => {
-  return QUOTER_ADDRESSES[chainId];
-};
+  return QUOTER_ADDRESSES[chainId]
+}
 
 export const getWETHAddress = (chainId) => {
-  return WETH_ADDRESSES[chainId];
-};
+  return WETH_ADDRESSES[chainId]
+}
 
 export const getNetworkConfig = (chainId) => {
-  return NETWORK_CONFIG[chainId] || { 
-    name: `Network ${chainId}`, 
-    isTestnet: false, 
-    hasUniswap: false, 
-    swapEnabled: false 
-  };
-};
+  return (
+    NETWORK_CONFIG[chainId] || {
+      name: `Network ${chainId}`,
+      isTestnet: false,
+      hasUniswap: false,
+      swapEnabled: false
+    }
+  )
+}
 
 export const getNetworkName = (chainId) => {
-  return getNetworkConfig(chainId).name;
-};
+  return getNetworkConfig(chainId).name
+}
 
 export const isTestnet = (chainId) => {
-  return getNetworkConfig(chainId).isTestnet;
-};
+  return getNetworkConfig(chainId).isTestnet
+}
 
 export const isSwapEnabled = (chainId) => {
-  const config = getNetworkConfig(chainId);
-  return config.hasUniswap && config.swapEnabled === true;
-};
+  const config = getNetworkConfig(chainId)
+  return config.hasUniswap && config.swapEnabled === true
+}
