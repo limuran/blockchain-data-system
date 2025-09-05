@@ -1,4 +1,4 @@
-# Enhanced Token Configuration
+// # Enhanced Token Configuration
 export const SUPPORTED_TOKENS = {
   // Ethereum Mainnet
   1: {
@@ -90,57 +90,57 @@ export const SUPPORTED_TOKENS = {
       isNative: false
     }
   }
-};
+}
 
 // Uniswap V3 Router addresses
 export const UNISWAP_ROUTER = {
   1: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Mainnet
   11155111: '0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E', // Sepolia
   56: '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4' // BSC (PancakeSwap)
-};
+}
 
 // Quoter V2 addresses for getting swap quotes
 export const QUOTER_ADDRESSES = {
   1: '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6',
   11155111: '0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3',
   56: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997'
-};
+}
 
 // WETH addresses for swapping
 export const WETH_ADDRESSES = {
   1: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
   11155111: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
   56: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c' // WBNB on BSC
-};
+}
 
 // Network names for display
 export const NETWORK_NAMES = {
   1: 'Ethereum',
   11155111: 'Sepolia',
   56: 'BSC'
-};
+}
 
 export const getTokensByChainId = (chainId) => {
-  return SUPPORTED_TOKENS[chainId] || {};
-};
+  return SUPPORTED_TOKENS[chainId] || {}
+}
 
 export const getTokenBySymbol = (chainId, symbol) => {
-  const tokens = getTokensByChainId(chainId);
-  return tokens[symbol];
-};
+  const tokens = getTokensByChainId(chainId)
+  return tokens[symbol]
+}
 
 export const getUniswapRouter = (chainId) => {
-  return UNISWAP_ROUTER[chainId];
-};
+  return UNISWAP_ROUTER[chainId]
+}
 
 export const getQuoterAddress = (chainId) => {
-  return QUOTER_ADDRESSES[chainId];
-};
+  return QUOTER_ADDRESSES[chainId]
+}
 
 export const getWETHAddress = (chainId) => {
-  return WETH_ADDRESSES[chainId];
-};
+  return WETH_ADDRESSES[chainId]
+}
 
 export const getNetworkName = (chainId) => {
-  return NETWORK_NAMES[chainId] || `Network ${chainId}`;
-};
+  return NETWORK_NAMES[chainId] || `Network ${chainId}`
+}
