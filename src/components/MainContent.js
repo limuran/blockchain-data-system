@@ -1,56 +1,73 @@
 import React, { useState } from 'react';
 import EthTransfer from './tabs/EthTransfer';
 import TokenTransfer from './tabs/TokenTransfer';
+import EnhancedTokenTransfer from './tabs/EnhancedTokenTransfer';
 import ContractStorage from './tabs/ContractStorage';
 import DataQuery from './tabs/DataQuery';
 
 const MainContent = ({ showToast, showProgress, updateProgress, hideProgress }) => {
-  const [activeTab, setActiveTab] = useState('eth');
+  const [activeTab, setActiveTab] = useState('enhanced-token');
 
   const tabs = [
-    { id: 'eth', label: '💰 ETH转账', desc: '携带数据转账' },
-    { id: 'token', label: '🪙 代币转账', desc: '代币合约调用' },
-    { id: 'contract', label: '📝 合约存储', desc: '事件日志存储' },
-    { id: 'query', label: '🔍 数据查询', desc: '表格化展示' }
+    {
+      id: 'enhanced-token',
+      name: '💎 增强代币转账',
+      component: EnhancedTokenTransfer
+    },
+    {
+      id: 'eth-transfer',
+      name: '⚡ ETH转账',
+      component: EthTransfer
+    },
+    {
+      id: 'token-transfer',
+      name: '🪙 简单代币转账',
+      component: TokenTransfer
+    },
+    {
+      id: 'contract-storage',
+      name: '📝 合约存储',
+      component: ContractStorage
+    },
+    {
+      id: 'data-query',
+      name: '🔍 数据查询',
+      component: DataQuery
+    }
   ];
 
-  const renderTabContent = () => {
-    const commonProps = { showToast, showProgress, updateProgress, hideProgress };
-
-    switch (activeTab) {
-      case 'eth': return <EthTransfer {...commonProps} />;
-      case 'token': return <TokenTransfer {...commonProps} />;
-      case 'contract': return <ContractStorage {...commonProps} />;
-      case 'query': return <DataQuery {...commonProps} />;
-      default: return <EthTransfer {...commonProps} />;
-    }
-  };
+  const ActiveComponent = tabs.find(tab => tab.id === activeTab)?.component;
 
   return (
-    <div className="glass rounded-2xl p-8 shadow-2xl">
-      <h2 className="text-xl font-bold mb-6 flex items-center">
-        <span className="mr-3">🚀</span>
-        数据上链操作中心
-      </h2>
-
-      <div className="flex mb-6 bg-gray-100 p-1 rounded-xl">
+    <div className="flex-1 p-6">
+      {/* Tab Navigation */}
+      <div className="flex flex-wrap gap-2 mb-6 p-1 bg-gray-100 rounded-xl">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all text-center ${
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
               activeTab === tab.id
-                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform -translate-y-1'
-                : 'text-gray-600 hover:bg-white hover:shadow-sm'
+                ? 'bg-white text-purple-600 shadow-md'
+                : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            <div className="font-semibold">{tab.label}</div>
-            <div className="text-xs opacity-75">{tab.desc}</div>
+            {tab.name}
           </button>
         ))}
       </div>
 
-      {renderTabContent()}
+      {/* Tab Content */}
+      <div className="bg-white rounded-xl shadow-lg">
+        {ActiveComponent && (
+          <ActiveComponent
+            showToast={showToast}
+            showProgress={showProgress}
+            updateProgress={updateProgress}
+            hideProgress={hideProgress}
+          />
+        )}
+      </div>
     </div>
   );
 };
