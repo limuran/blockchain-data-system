@@ -18,6 +18,15 @@ const QUOTER_ABI = [
 // Fee tiers for different pools (0.05%, 0.3%, 1%)
 const FEE_TIERS = [500, 3000, 10000];
 
+// 测试网代币水龙头地址（模拟兑换）
+const TESTNET_FAUCETS = {
+  11155111: {
+    USDC: 'https://faucet.circle.com/',
+    LINK: 'https://faucets.chain.link/',
+    UNI: 'https://app.uniswap.org/#/pool'
+  }
+};
+
 /**
  * Get the best quote across different fee tiers
  */
@@ -180,50 +189,43 @@ export const swapETHForToken = async (signer, chainId, tokenOut, amountIn, amoun
 };
 
 /**
- * Get swap transaction parameters for MetaMask
+ * Check if swap is possible and get route info - with fallback for testnets
  */
-export const getSwapTransactionParams = async (provider, chainId, tokenOut, amountIn, recipient, slippage = 5) => {
+export const checkSwapRoute = async (provider, chainId, tokenIn, tokenOut, amountIn) => {
   try {
-    const routerAddress = getUniswapRouter(chainId);
-    const wethAddress = getWETHAddress(chainId);
-    
-    // Get best quote
-    const quote = await getBestSwapQuote(provider, chainId, wethAddress, tokenOut, amountIn, true);
-    
-    // Calculate minimum amount out with slippage
-    const amountOutMinimum = BigInt(quote.amountOut) * BigInt(100 - slippage) / BigInt(100);
-    
-    const deadline = Math.floor(Date.now() / 1000) + 1800;
-    
-    const params = {
-      tokenIn: wethAddress,
-      tokenOut: tokenOut,
-      fee: quote.bestFee,
-      recipient: recipient,
-      deadline: deadline,
-      amountIn: amountIn,
-      amountOutMinimum: amountOutMinimum.toString(),
-      sqrtPriceLimitX96: 0
-    };
-    
-    // Encode the function call
-    const router = new ethers.Contract(routerAddress, UNISWAP_ROUTER_ABI, provider);
-    const data = router.interface.encodeFunctionData('exactInputSingle', [params]);
+    const quote = await getBestSwapQuote(provider, chainId, tokenIn, tokenOut, amountIn, true);
     
     return {
-      to: routerAddress,
-      data: data,
-      value: amountIn,
-      gasEstimate: quote.gasEstimate,
+      isAvailable: true,
       expectedOutput: quote.amountOut,
-      minimumOutput: amountOutMinimum.toString(),
       fee: quote.bestFee,
+      gasEstimate: quote.gasEstimate,
       priceImpact: calculatePriceImpact(amountIn, quote.amountOut, quote.bestFee)
     };
   } catch (error) {
-    console.error('Error getting swap transaction params:', error);
-    throw error;
+    // 对于测试网，提供备用建议
+    if (TESTNET_FAUCETS[chainId]) {
+      return {
+        isAvailable: false,
+        error: error.message,
+        isTestnet: true,
+        faucetInfo: TESTNET_FAUCETS[chainId],
+        suggestion: '测试网建议使用代币水龙头获取测试代币'
+      };
+    }
+    
+    return {
+      isAvailable: false,
+      error: error.message
+    };
   }
+};
+
+/**
+ * Get testnet faucet information
+ */
+export const getTestnetFaucets = (chainId) => {
+  return TESTNET_FAUCETS[chainId] || null;
 };
 
 /**
@@ -241,23 +243,35 @@ const calculatePriceImpact = (amountIn, amountOut, fee) => {
 };
 
 /**
- * Check if swap is possible and get route info
+ * Alternative swap methods for testnets (placeholder for future implementation)
  */
-export const checkSwapRoute = async (provider, chainId, tokenIn, tokenOut, amountIn) => {
-  try {
-    const quote = await getBestSwapQuote(provider, chainId, tokenIn, tokenOut, amountIn, true);
-    
-    return {
-      isAvailable: true,
-      expectedOutput: quote.amountOut,
-      fee: quote.bestFee,
-      gasEstimate: quote.gasEstimate,
-      priceImpact: calculatePriceImpact(amountIn, quote.amountOut, quote.bestFee)
-    };
-  } catch (error) {
-    return {
-      isAvailable: false,
-      error: error.message
-    };
-  }
+export const getAlternativeSwapOptions = (chainId) => {
+  const alternatives = {
+    11155111: [
+      {
+        name: '测试币水龙头',
+        description: '直接获取测试代币',
+        action: 'faucet'
+      },
+      {
+        name: 'DEX聚合器',
+        description: '尝试其他DEX路由',
+        action: 'aggregator'
+      }
+    ],
+    1: [
+      {
+        name: '1inch',
+        description: 'DEX聚合器，可能有更好价格',
+        action: '1inch'
+      },
+      {
+        name: 'Paraswap',
+        description: '另一个DEX聚合器选项',
+        action: 'paraswap'
+      }
+    ]
+  };
+  
+  return alternatives[chainId] || [];
 };
