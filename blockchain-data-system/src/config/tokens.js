@@ -1,4 +1,4 @@
-// # Enhanced Token Configuration
+# Enhanced Token Configuration with Fixed Testnet Support
 export const SUPPORTED_TOKENS = {
   // Ethereum Mainnet
   1: {
@@ -28,36 +28,39 @@ export const SUPPORTED_TOKENS = {
       icon: '🟡',
       type: 'ERC20',
       isNative: false
-    },
-    FRAX: {
-      address: '0x853d955aCEf822Db058eb8505911ED77F175b99e',
-      decimals: 18,
-      symbol: 'FRAX',
-      name: 'Frax',
-      icon: '❄️',
-      type: 'ERC20',
-      isNative: false
     }
   },
-  // Sepolia Testnet
+  // Sepolia Testnet - 使用实际可用的测试代币
   11155111: {
-    USDT: {
-      address: '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06',
-      decimals: 6,
-      symbol: 'USDT',
-      name: 'Tether USD (Sepolia)',
-      icon: '🔗',
-      type: 'ERC20',
-      isNative: false
-    },
     USDC: {
-      address: '0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8',
+      address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
       decimals: 6,
       symbol: 'USDC',
       name: 'USD Coin (Sepolia)',
       icon: '🔵',
       type: 'ERC20',
-      isNative: false
+      isNative: false,
+      testnet: true
+    },
+    LINK: {
+      address: '0x779877A7B0D9E8603169DdbD7836e478b4624789',
+      decimals: 18,
+      symbol: 'LINK',
+      name: 'Chainlink Token (Sepolia)',
+      icon: '🔗',
+      type: 'ERC20',
+      isNative: false,
+      testnet: true
+    },
+    UNI: {
+      address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',
+      decimals: 18,
+      symbol: 'UNI',
+      name: 'Uniswap Token (Sepolia)',
+      icon: '🦄',
+      type: 'ERC20',
+      isNative: false,
+      testnet: true
     }
   },
   // BSC Mainnet
@@ -90,57 +93,99 @@ export const SUPPORTED_TOKENS = {
       isNative: false
     }
   }
-}
+};
 
-// Uniswap V3 Router addresses
+// Network configuration
+export const NETWORK_CONFIG = {
+  1: {
+    name: 'Ethereum',
+    chainName: 'Ethereum Mainnet',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://mainnet.infura.io/v3/'],
+    blockExplorerUrls: ['https://etherscan.io'],
+    isTestnet: false,
+    hasUniswap: true,
+    swapEnabled: true
+  },
+  11155111: {
+    name: 'Sepolia',
+    chainName: 'Sepolia Test Network',
+    nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://sepolia.infura.io/v3/'],
+    blockExplorerUrls: ['https://sepolia.etherscan.io'],
+    isTestnet: true,
+    hasUniswap: false,
+    swapEnabled: false // 禁用兑换功能，测试网流动性不足
+  },
+  56: {
+    name: 'BSC',
+    chainName: 'Binance Smart Chain',
+    nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+    rpcUrls: ['https://bsc-dataseed.binance.org/'],
+    blockExplorerUrls: ['https://bscscan.com'],
+    isTestnet: false,
+    hasUniswap: true,
+    swapEnabled: true
+  }
+};
+
+// Updated Router addresses
 export const UNISWAP_ROUTER = {
   1: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Mainnet
-  11155111: '0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E', // Sepolia
   56: '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4' // BSC (PancakeSwap)
-}
+};
 
-// Quoter V2 addresses for getting swap quotes
+// Updated Quoter V2 addresses
 export const QUOTER_ADDRESSES = {
   1: '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6',
-  11155111: '0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3',
   56: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997'
-}
+};
 
-// WETH addresses for swapping
+// WETH addresses
 export const WETH_ADDRESSES = {
   1: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-  11155111: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
   56: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c' // WBNB on BSC
-}
-
-// Network names for display
-export const NETWORK_NAMES = {
-  1: 'Ethereum',
-  11155111: 'Sepolia',
-  56: 'BSC'
-}
+};
 
 export const getTokensByChainId = (chainId) => {
-  return SUPPORTED_TOKENS[chainId] || {}
-}
+  return SUPPORTED_TOKENS[chainId] || {};
+};
 
 export const getTokenBySymbol = (chainId, symbol) => {
-  const tokens = getTokensByChainId(chainId)
-  return tokens[symbol]
-}
+  const tokens = getTokensByChainId(chainId);
+  return tokens[symbol];
+};
 
 export const getUniswapRouter = (chainId) => {
-  return UNISWAP_ROUTER[chainId]
-}
+  return UNISWAP_ROUTER[chainId];
+};
 
 export const getQuoterAddress = (chainId) => {
-  return QUOTER_ADDRESSES[chainId]
-}
+  return QUOTER_ADDRESSES[chainId];
+};
 
 export const getWETHAddress = (chainId) => {
-  return WETH_ADDRESSES[chainId]
-}
+  return WETH_ADDRESSES[chainId];
+};
+
+export const getNetworkConfig = (chainId) => {
+  return NETWORK_CONFIG[chainId] || { 
+    name: `Network ${chainId}`, 
+    isTestnet: false, 
+    hasUniswap: false, 
+    swapEnabled: false 
+  };
+};
 
 export const getNetworkName = (chainId) => {
-  return NETWORK_NAMES[chainId] || `Network ${chainId}`
-}
+  return getNetworkConfig(chainId).name;
+};
+
+export const isTestnet = (chainId) => {
+  return getNetworkConfig(chainId).isTestnet;
+};
+
+export const isSwapEnabled = (chainId) => {
+  const config = getNetworkConfig(chainId);
+  return config.hasUniswap && config.swapEnabled === true;
+};
