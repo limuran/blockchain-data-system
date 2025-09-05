@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useWallet } from '../../contexts/WalletContext';
 import { useTransaction } from '../../contexts/TransactionContext';
-import { getTokensByChainId, getUniswapRouter, getNetworkName, getWETHAddress } from '../../config/tokens';
+import { 
+  getTokensByChainId, 
+  getUniswapRouter, 
+  getNetworkName, 
+  getWETHAddress, 
+  isSwapEnabled,
+  isTestnet,
+  getNetworkConfig
+} from '../../config/tokens';
 import { 
   getTokenBalance, 
   getETHBalance, 
@@ -27,7 +35,7 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
   const [loading, setLoading] = useState(false);
   const [balances, setBalances] = useState({});
   const [ethBalance, setEthBalance] = useState('0.000000');
-  const [selectedToken, setSelectedToken] = useState('USDT');
+  const [selectedToken, setSelectedToken] = useState('USDC');
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapQuote, setSwapQuote] = useState(null);
   const [swapRoute, setSwapRoute] = useState(null);
@@ -42,15 +50,26 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
   // Computed values
   const supportedTokens = getTokensByChainId(wallet.chainId);
   const currentToken = supportedTokens[selectedToken];
-  const hasUniswapSupport = !!getUniswapRouter(wallet.chainId);
+  const hasSwapSupport = isSwapEnabled(wallet.chainId);
+  const networkConfig = getNetworkConfig(wallet.chainId);
   const networkName = getNetworkName(wallet.chainId);
+  const isTestnetwork = isTestnet(wallet.chainId);
 
   // Generate transfer data based on context
   function generateTransferData() {
     const timestamp = Date.now();
     const orderNumber = `ORD${timestamp}`;
-    return `订单编号:${orderNumber} 付款类型:代币转账 Token transfer via smart contract - Network: ${getNetworkName(wallet.chainId) || 'Unknown'} - Timestamp: ${new Date().toISOString()}`;
+    const networkInfo = getNetworkName(wallet.chainId) || 'Unknown';
+    return `订单编号:${orderNumber} 付款类型:代币转账 Token transfer via smart contract - Network: ${networkInfo} - Timestamp: ${new Date().toISOString()}`;
   }
+
+  // Auto-select first available token when network changes
+  useEffect(() => {
+    const tokens = Object.keys(supportedTokens);
+    if (tokens.length > 0 && !supportedTokens[selectedToken]) {
+      setSelectedToken(tokens[0]);
+    }
+  }, [supportedTokens, selectedToken]);
 
   // Fetch all balances efficiently
   useEffect(() => {
@@ -95,12 +114,14 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
     return () => clearInterval(interval);
   }, [wallet.address, wallet.chainId, supportedTokens]);
 
-  // Check swap availability and get quotes
+  // Check swap availability only if swap is enabled for this network
   useEffect(() => {
     const checkSwapAvailability = async () => {
-      if (!currentToken || !form.amount || !hasUniswapSupport) {
-        setSwapQuote(null);
-        setSwapRoute(null);
+      // Clear swap data first
+      setSwapQuote(null);
+      setSwapRoute(null);
+      
+      if (!currentToken || !form.amount || !hasSwapSupport) {
         return;
       }
 
@@ -108,8 +129,6 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
       const available = parseFloat(balances[selectedToken] || '0');
       
       if (required <= available) {
-        setSwapQuote(null);
-        setSwapRoute(null);
         return;
       }
 
@@ -148,45 +167,16 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
         
       } catch (error) {
         console.error('检查兑换可用性失败:', error);
-        setSwapQuote(null);
-        setSwapRoute(null);
+        // Don't show error for testnet since swap is disabled
+        if (!isTestnetwork) {
+          console.warn('Swap not available:', error.message);
+        }
       }
     };
 
     const debounceTimer = setTimeout(checkSwapAvailability, 500);
     return () => clearTimeout(debounceTimer);
-  }, [form.amount, selectedToken, balances, ethBalance, currentToken, hasUniswapSupport, wallet.chainId]);
-
-  // Check approval status when token or router changes
-  useEffect(() => {
-    const checkApproval = async () => {
-      if (!currentToken || !wallet.address || !hasUniswapSupport) {
-        setApprovalStatus(null);
-        return;
-      }
-
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const routerAddress = getUniswapRouter(wallet.chainId);
-        const amountWei = ethers.parseUnits(form.amount || '0', currentToken.decimals);
-        
-        const approval = await checkTokenApproval(
-          provider,
-          currentToken.address,
-          wallet.address,
-          routerAddress,
-          amountWei.toString()
-        );
-        
-        setApprovalStatus(approval);
-      } catch (error) {
-        console.error('检查授权状态失败:', error);
-        setApprovalStatus(null);
-      }
-    };
-
-    checkApproval();
-  }, [currentToken, wallet.address, form.amount, hasUniswapSupport, wallet.chainId]);
+  }, [form.amount, selectedToken, balances, ethBalance, currentToken, hasSwapSupport, wallet.chainId, isTestnetwork]);
 
   // Handle token selection
   const handleTokenSelect = (symbol) => {
@@ -197,112 +187,7 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
     }));
   };
 
-  // Handle swap and transfer with improved flow
-  const handleSwapAndTransfer = async (slippage = 5) => {
-    if (!swapQuote || !currentToken || !swapRoute?.isAvailable) return;
-    
-    setLoading(true);
-    try {
-      showProgress('准备ETH兑换...');
-      updateProgress(1);
-      
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      
-      const amountWei = ethers.parseUnits(form.amount, currentToken.decimals);
-      const ethAmountWei = ethers.parseEther(swapQuote.ethRequired);
-      
-      // Calculate minimum output with slippage
-      const minAmountOut = (amountWei * BigInt(100 - slippage) / BigInt(100)).toString();
-      
-      updateProgress(2);
-      showProgress('执行ETH兑换...');
-      
-      // Execute swap
-      const swapTx = await swapETHForToken(
-        signer,
-        wallet.chainId,
-        currentToken.address,
-        ethAmountWei.toString(),
-        minAmountOut,
-        wallet.address,
-        slippage
-      );
-      
-      updateProgress(3);
-      showProgress('等待兑换确认...');
-      const swapReceipt = await swapTx.wait();
-      
-      // Wait for balance update
-      updateProgress(4);
-      showProgress('刷新余额...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Check new balance
-      const newBalance = await getTokenBalance(
-        provider, 
-        currentToken.address, 
-        wallet.address, 
-        currentToken.decimals
-      );
-      
-      setBalances(prev => ({ ...prev, [selectedToken]: newBalance }));
-      
-      if (parseFloat(newBalance) >= parseFloat(form.amount)) {
-        updateProgress(5);
-        showProgress('执行代币转账...');
-        
-        // Execute transfer
-        const transferTx = await transferToken(
-          signer,
-          currentToken.address,
-          form.address,
-          amountWei.toString()
-        );
-        
-        const transferReceipt = await transferTx.wait();
-        
-        // Record transaction
-        addRecord({
-          type: `🔄 ${selectedToken}转账 (含ETH兑换)`,
-          hash: transferTx.hash,
-          amount: `${form.amount} ${selectedToken}`,
-          data: form.data,
-          gasUsed: (BigInt(swapReceipt.gasUsed) + BigInt(transferReceipt.gasUsed)).toString(),
-          blockNumber: transferReceipt.blockNumber,
-          extra: `ETH兑换: ${swapQuote.ethRequired} ETH → ${form.amount} ${selectedToken}`
-        });
-        
-        setTimeout(() => {
-          hideProgress();
-          showToast('✅ ETH兑换并转账成功！', 'success');
-          setShowSwapModal(false);
-          // Reset form
-          setForm(prev => ({ ...prev, amount: '1.0', address: '', data: generateTransferData() }));
-        }, 500);
-      } else {
-        throw new Error(`兑换后余额不足：获得 ${newBalance} ${selectedToken}，需要 ${form.amount} ${selectedToken}`);
-      }
-      
-    } catch (error) {
-      hideProgress();
-      console.error('ETH兑换并转账失败:', error);
-      
-      let errorMessage = '操作失败: ' + error.message;
-      if (error.message.includes('user rejected')) {
-        errorMessage = '用户取消了交易';
-      } else if (error.message.includes('insufficient funds')) {
-        errorMessage = 'ETH余额不足，请检查余额';
-      }
-      
-      showToast(errorMessage, 'error');
-      setShowSwapModal(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle direct transfer with approval check
+  // Handle direct transfer without swap functionality
   const handleDirectTransfer = async () => {
     if (!currentToken) return;
     
@@ -314,28 +199,6 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const amountWei = ethers.parseUnits(form.amount, currentToken.decimals);
-      
-      // Check if approval is needed for router (for future swaps)
-      const routerAddress = getUniswapRouter(wallet.chainId);
-      if (routerAddress && approvalStatus?.needsApproval) {
-        updateProgress(2);
-        showProgress('授权代币使用权限...');
-        showToast('需要授权代币使用权限，请确认MetaMask交易...', 'info');
-        
-        const approveTx = await approveToken(
-          signer,
-          currentToken.address,
-          routerAddress,
-          ethers.MaxUint256,
-          true // Use infinite approval
-        );
-        
-        await approveTx.wait();
-        showToast('✅ 代币授权成功！', 'success');
-        
-        // Update approval status
-        setApprovalStatus(prev => ({ ...prev, needsApproval: false, hasInfiniteApproval: true }));
-      }
       
       updateProgress(4);
       showProgress('执行代币转账...');
@@ -432,8 +295,10 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
     const available = parseFloat(balances[selectedToken] || '0');
     
     if (required > available) {
-      if (swapQuote?.canAfford && swapRoute?.isAvailable) {
+      if (hasSwapSupport && swapQuote?.canAfford && swapRoute?.isAvailable) {
         setShowSwapModal(true);
+      } else if (isTestnetwork) {
+        showToast('余额不足。测试网络不支持ETH兑换功能，请使用测试币水龙头获取代币', 'error');
       } else if (swapQuote && !swapQuote.canAfford) {
         showToast(`ETH余额不足，需要 ${swapQuote.ethRequired} ETH 兑换 ${selectedToken}`, 'error');
       } else {
@@ -467,10 +332,26 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
         <div>
           <h3 className="text-lg font-bold text-purple-900">增强版代币转账</h3>
           <p className="text-purple-700 text-sm">
-            当前网络: {networkName} | 支持多种稳定币，智能ETH兑换，自动授权管理
+            当前网络: {networkName} {isTestnetwork && '(测试网)'} | 
+            {hasSwapSupport ? ' 支持ETH兑换' : ' 仅支持直接转账'}
           </p>
         </div>
       </div>
+
+      {/* Testnet Warning */}
+      {isTestnetwork && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center space-x-2">
+            <span className="text-blue-600">ℹ️</span>
+            <div>
+              <h4 className="font-medium text-blue-900">测试网络提示</h4>
+              <p className="text-blue-800 text-sm mt-1">
+                当前为测试网络，ETH兑换功能已禁用。如需测试代币，请访问相应的测试币水龙头。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Token Selection */}
@@ -493,6 +374,9 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
                   <span className="text-xl">{token.icon}</span>
                   <span className="font-semibold">{symbol}</span>
                   <span className="text-xs bg-gray-200 px-1 rounded">{token.type}</span>
+                  {token.testnet && (
+                    <span className="text-xs bg-blue-200 text-blue-700 px-1 rounded">测试</span>
+                  )}
                 </div>
                 <div className="text-xs text-gray-600 mb-1">{token.name}</div>
                 <div className="text-sm font-medium text-purple-600">
@@ -507,11 +391,6 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
         <div className="bg-white rounded-lg p-4 border shadow-sm">
           <h4 className="font-medium mb-3 flex items-center">
             💳 钱包余额
-            {approvalStatus?.hasInfiniteApproval && (
-              <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                ✅ 已授权
-              </span>
-            )}
           </h4>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="bg-gray-50 p-3 rounded">
@@ -572,19 +451,18 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
           {parseFloat(form.amount) > parseFloat(balances[selectedToken] || '0') && (
             <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="text-yellow-800 text-sm font-medium mb-2">
-                ⚠️ 余额不够！还需要 {swapQuote?.shortage} {selectedToken}
+                ⚠️ 余额不够！还需要 {(parseFloat(form.amount) - parseFloat(balances[selectedToken] || '0')).toFixed(6)} {selectedToken}
               </div>
-              {swapQuote && hasUniswapSupport && (
+              {isTestnetwork ? (
+                <div className="text-sm text-blue-700">
+                  💡 请使用测试币水龙头获取 {selectedToken} 测试代币
+                </div>
+              ) : hasSwapSupport && swapQuote ? (
                 <div className="space-y-2">
                   <div className="text-sm">
                     {swapQuote.canAfford ? (
                       <div className="text-green-700">
                         ✅ 可用 {swapQuote.ethRequired} ETH 兑换所需的 {selectedToken}
-                        {swapRoute && (
-                          <div className="text-xs text-gray-600 mt-1">
-                            预估手续费: {swapRoute.fee/10000}% | 价格影响: {swapRoute.priceImpact}%
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="text-red-700">
@@ -592,16 +470,10 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
                       </div>
                     )}
                   </div>
-                  {swapQuote.canAfford && (
-                    <button
-                      type="button"
-                      onClick={() => setShowSwapModal(true)}
-                      disabled={loading}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium underline disabled:opacity-50"
-                    >
-                      点击查看兑换详情 →
-                    </button>
-                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-red-700">
+                  ❌ 当前网络不支持ETH兑换功能
                 </div>
               )}
             </div>
@@ -631,8 +503,6 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
           className={`w-full py-4 rounded-lg font-semibold transition-all ${
             loading || !wallet.address || !form.address || !form.amount
               ? 'opacity-50 cursor-not-allowed bg-gray-400 text-white'
-              : parseFloat(form.amount) > parseFloat(balances[selectedToken] || '0') && swapQuote?.canAfford
-              ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:shadow-lg hover:-translate-y-1'
               : 'bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:shadow-lg hover:-translate-y-1'
           }`}
         >
@@ -641,8 +511,6 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               <span>处理中...</span>
             </div>
-          ) : parseFloat(form.amount) > parseFloat(balances[selectedToken] || '0') && swapQuote?.canAfford ? (
-            `🔄 用ETH兑换并转账 ${form.amount} ${selectedToken}`
           ) : (
             `💸 发送 ${form.amount} ${selectedToken}`
           )}
@@ -653,27 +521,16 @@ const TokenTransfer = ({ showToast, showProgress, updateProgress, hideProgress }
       <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h4 className="font-medium text-blue-900 mb-2">💡 功能说明</h4>
         <ul className="text-sm text-blue-800 space-y-1">
-          <li>• 支持多种稳定币转账（USDT、USDC、DAI等）</li>
-          <li>• 余额不足时智能ETH兑换功能</li>
-          <li>• 自动检测并处理ERC20代币授权</li>
-          <li>• 多费率层级，自动选择最优汇率</li>
+          <li>• 支持多种代币转账（USDT、USDC、DAI等）</li>
+          {hasSwapSupport ? (
+            <li>• 余额不足时智能ETH兑换功能</li>
+          ) : (
+            <li>• 当前网络仅支持直接转账</li>
+          )}
           <li>• 转账信息永久记录在区块链上</li>
+          {isTestnetwork && <li>• 测试网络 - 请使用测试币水龙头获取代币</li>}
         </ul>
       </div>
-
-      {/* Swap Modal */}
-      <SwapModal
-        isOpen={showSwapModal}
-        onClose={() => setShowSwapModal(false)}
-        onConfirm={handleSwapAndTransfer}
-        swapQuote={swapQuote}
-        swapRoute={swapRoute}
-        selectedToken={selectedToken}
-        ethBalance={ethBalance}
-        loading={loading}
-        targetAmount={form.amount}
-        recipientAddress={form.address}
-      />
     </div>
   );
 };
