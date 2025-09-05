@@ -11,8 +11,7 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
   const [form, setForm] = useState({
     address: '',
     amount: '0.001',
-    data: '你好世界！这是一条中文测试数据。Hello World! This is test data.',
-    includeData: false // 新增选项：是否包含数据
+    data: '你好世界！这是一条中文测试数据。Hello World! This is test data.'
   });
 
   // 获取ETH余额
@@ -47,74 +46,52 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
       return;
     }
 
-    if (parseFloat(form.amount) <= 0) {
-      showToast('请输入有效的转账金额', 'error');
-      return;
-    }
-
-    if (form.includeData && !form.data.trim()) {
-      showToast('启用数据上链时请输入要上链的数据', 'error');
+    if (!form.data.trim()) {
+      showToast('请输入要上链的数据', 'error');
       return;
     }
 
     setLoading(true);
     try {
-      showProgress('准备ETH转账...');
+      showProgress('ETH转账 + 数据上链中...');
       updateProgress(1);
 
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
 
       const amountWei = ethers.parseEther(form.amount);
-      
+      const encodedData = ethers.hexlify(ethers.toUtf8Bytes(form.data));
+
+      updateProgress(2);
+
       // 检查余额
       const balance = await provider.getBalance(wallet.address);
       if (balance < amountWei) {
         throw new Error('ETH余额不足');
       }
 
-      updateProgress(2);
-
-      let txParams = {
-        to: form.address,
-        value: amountWei
-      };
-
-      // 只有当用户明确启用数据上链时才添加data字段
-      if (form.includeData && form.data.trim()) {
-        const encodedData = ethers.hexlify(ethers.toUtf8Bytes(form.data));
-        txParams.data = encodedData;
-        showProgress('准备数据上链转账...');
-      } else {
-        showProgress('准备简单ETH转账...');
-      }
-
       updateProgress(3);
 
-      // 估算Gas
+      // 构建交易参数 - 恢复原来正确的方式
+      const txParams = {
+        to: form.address,
+        value: amountWei,
+        data: encodedData
+      };
+
+      // 估算Gas费用
+      let gasLimit;
       try {
         const gasEstimate = await provider.estimateGas(txParams);
-        txParams.gasLimit = gasEstimate + gasEstimate / 10n; // 增加10%缓冲
+        gasLimit = gasEstimate + (gasEstimate * 20n / 100n); // 增加20%缓冲
       } catch (gasError) {
         console.warn('Gas估算失败，使用默认值:', gasError);
-        txParams.gasLimit = form.includeData ? 100000n : 21000n;
+        gasLimit = 100000n; // 数据上链需要更多gas
       }
 
-      // 获取Gas价格（兼容不同网络）
-      try {
-        const feeData = await provider.getFeeData();
-        if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
-          // EIP-1559 网络
-          txParams.maxFeePerGas = feeData.maxFeePerGas;
-          txParams.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
-        } else if (feeData.gasPrice) {
-          // 传统网络
-          txParams.gasPrice = feeData.gasPrice;
-        }
-      } catch (feeError) {
-        console.warn('获取Gas费失败，让MetaMask自动处理:', feeError);
-      }
+      txParams.gasLimit = gasLimit;
 
+      // 发送交易
       showProgress('发送交易...');
       updateProgress(4);
 
@@ -126,24 +103,22 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
       const receipt = await tx.wait();
 
       addRecord({
-        type: form.includeData ? '🔗 ETH数据上链' : '💰 ETH转账',
+        type: '🔗 ETH数据上链',
         hash: tx.hash,
         amount: `${form.amount} ETH`,
-        data: form.includeData ? form.data : `简单ETH转账到 ${form.address.slice(0, 6)}...${form.address.slice(-4)}`,
+        data: form.data,
         gasUsed: receipt.gasUsed.toString(),
         blockNumber: receipt.blockNumber,
-        extra: form.includeData ? '包含自定义数据' : '标准ETH转账'
+        extra: `数据长度: ${form.data.length} 字符`
       });
 
       setTimeout(() => {
         hideProgress();
-        showToast('✅ ETH转账成功！', 'success');
-        // 重置表单
+        showToast('✅ ETH转账 + 数据上链成功！', 'success');
+        // 重置地址，保留其他字段便于继续测试
         setForm(prev => ({ 
           ...prev, 
-          address: '', 
-          amount: '0.001',
-          data: '你好世界！这是一条中文测试数据。Hello World! This is test data.'
+          address: ''
         }));
         
         // 刷新余额
@@ -167,8 +142,6 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
         errorMessage = '用户取消了交易';
       } else if (error.message.includes('insufficient funds')) {
         errorMessage = 'ETH余额不足或Gas费不够';
-      } else if (error.message.includes('cannot include data')) {
-        errorMessage = '转账到该地址不支持附加数据，请关闭数据上链选项';
       }
       
       showToast(errorMessage, 'error');
@@ -236,43 +209,25 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
               最大
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-1">💡 支持18位精度，建议预留0.01 ETH作为Gas费</p>
+          <p className="text-xs text-gray-500 mt-1">💡 支持18位精度，可以0个以太币</p>
         </div>
 
-        {/* 数据上链选项 */}
+        {/* 数据输入 */}
         <div>
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={form.includeData}
-              onChange={(e) => setForm(prev => ({ ...prev, includeData: e.target.checked }))}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              disabled={loading}
-            />
-            <span className="text-sm font-medium">🔗 启用数据上链功能</span>
-          </label>
+          <label className="block text-sm font-medium mb-2">📄 上链数据（任意字符串）</label>
+          <textarea
+            value={form.data}
+            rows="4"
+            onChange={(e) => setForm(prev => ({ ...prev, data: e.target.value }))}
+            className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none resize-none text-sm"
+            placeholder="输入任意数据，支持中文、英文、数字等..."
+            required
+            disabled={loading}
+          />
           <p className="text-xs text-gray-500 mt-1">
-            启用后会在交易中附加自定义数据，Gas费会略微增加
+            ℹ️ 数据将编码到交易data字段，永久存储在区块链上
           </p>
         </div>
-
-        {/* 数据输入（仅当启用时显示） */}
-        {form.includeData && (
-          <div>
-            <label className="block text-sm font-medium mb-2">📄 上链数据</label>
-            <textarea
-              value={form.data}
-              rows="4"
-              onChange={(e) => setForm(prev => ({ ...prev, data: e.target.value }))}
-              className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none resize-none text-sm"
-              placeholder="输入任意数据，支持中文、英文、数字等..."
-              disabled={loading}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              ℹ️ 数据将编码到交易data字段，永久存储在区块链上
-            </p>
-          </div>
-        )}
 
         {/* 提交按钮 */}
         <button
@@ -289,23 +244,21 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
               <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
               <span>处理中...</span>
             </div>
-          ) : form.includeData ? (
-            '🔗 发送ETH + 数据上链'
           ) : (
-            '💰 发送ETH转账'
+            '🚀 发送ETH转账上链'
           )}
         </button>
       </form>
 
       {/* 功能说明 */}
       <div className="mt-6 p-4 bg-blue-100 border border-blue-300 rounded-lg">
-        <h4 className="font-semibold text-blue-900 mb-2">💡 功能说明</h4>
+        <h4 className="font-semibold text-blue-900 mb-2">🎡 优势特点</h4>
         <div className="text-sm text-blue-800 space-y-1">
-          <p>• 💰 <strong>普通转账</strong>：标准ETH转账，Gas费最低（21000 gas）</p>
-          <p>• 🔗 <strong>数据上链</strong>：在转账同时存储自定义数据到区块链</p>
+          <p>• 💰 支持18位精度，可以0ETH转账</p>
           <p>• 🌍 支持中英文任意字符串数据</p>
-          <p>• 🔍 数据永久存储，可通过交易哈希查询</p>
-          <p>• ⚡ 智能Gas估算和优化</p>
+          <p>• 🔍 数据永久存储，可通过交易查询</p>
+          <p>• ⚡ Gas优化，智能估算</p>
+          <p>• 🧪 测试网完全支持</p>
         </div>
       </div>
     </div>
