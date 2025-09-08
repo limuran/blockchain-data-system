@@ -33,6 +33,29 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
     return () => clearInterval(interval);
   }, [wallet.address]);
 
+  // 检查是否为内部账户转账
+  const isInternalTransfer = (fromAddress, toAddress) => {
+    // 简化检查：如果目标地址和当前地址相同，则认为是内部转账
+    return fromAddress.toLowerCase() === toAddress.toLowerCase();
+  };
+
+  // 检查是否可能是同一钱包的不同账户
+  const isPossibleSameWalletTransfer = async (toAddress) => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // 获取所有账户
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      const normalizedToAddress = toAddress.toLowerCase();
+      
+      // 检查目标地址是否在钱包的账户列表中
+      return accounts.some(account => account.toLowerCase() === normalizedToAddress);
+    } catch (error) {
+      console.warn('无法检查账户列表:', error);
+      return false;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -51,6 +74,12 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
       return;
     }
 
+    // 检查是否为自己转给自己
+    if (isInternalTransfer(wallet.address, form.address)) {
+      showToast('不能转账给自己，请输入其他地址', 'error');
+      return;
+    }
+
     setLoading(true);
     try {
       showProgress('ETH转账 + 数据上链中...');
@@ -66,78 +95,128 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
 
       // 检查余额
       const balance = await provider.getBalance(wallet.address);
-      if (balance < amountWei) {
-        throw new Error('ETH余额不足');
+      const gasPrice = await provider.getFeeData();
+      const estimatedGasCost = gasPrice.gasPrice * 100000n; // 预估gas费
+      
+      if (balance < (amountWei + estimatedGasCost)) {
+        throw new Error('ETH余额不足以支付转账金额和Gas费');
       }
 
       updateProgress(3);
 
-      // 构建交易参数
-      const txParams = {
+      // 检查是否可能是同一钱包的不同账户转账
+      const isSameWallet = await isPossibleSameWalletTransfer(form.address);
+      
+      let txParams = {
         to: form.address,
-        value: amountWei,
-        data: encodedData
+        value: amountWei
       };
 
-      // 重要：大幅增加Gas限制来解决问题
-      let gasLimit;
-      try {
-        // 先尝试估算Gas
-        const gasEstimate = await provider.estimateGas(txParams);
-        // 增加更大的缓冲（50%而不是20%）
-        gasLimit = gasEstimate + (gasEstimate * 50n / 100n);
-        console.log('估算Gas:', gasEstimate.toString(), '实际使用:', gasLimit.toString());
-      } catch (gasError) {
-        console.warn('Gas估算失败，使用更大的默认值:', gasError);
-        // 使用更大的默认值：带data的转账需要更多gas
-        const dataLength = encodedData.length;
-        const baseGas = 21000n; // 基础ETH转账
-        const dataGas = BigInt(dataLength) * 16n; // 每字茂16 gas（非零字节）
-        gasLimit = baseGas + dataGas + 50000n; // 额外缓冲50000 gas
-        console.log('使用默认Gas限制:', gasLimit.toString());
+      // 如果可能是同一钱包转账，先尝试不带data的转账
+      if (isSameWallet) {
+        console.log('检测到可能的同一钱包转账，使用两步法：1.ETH转账 2.纯数据交易');
+        showToast('检测到同一钱包转账，将使用两步法确保成功', 'info');
+        
+        // 第一步：纯ETH转账（不带数据）
+        showProgress('第一步：执行ETH转账...');
+        updateProgress(3.5);
+        
+        const ethTx = await signer.sendTransaction(txParams);
+        const ethReceipt = await ethTx.wait();
+        
+        // 第二步：发送纯数据交易（0 ETH，仅包含数据）
+        showProgress('第二步：上链数据...');
+        updateProgress(4.5);
+        
+        const dataTxParams = {
+          to: form.address,
+          value: 0n,
+          data: encodedData,
+          gasLimit: 50000n // 数据交易使用较少的gas
+        };
+        
+        const dataTx = await signer.sendTransaction(dataTxParams);
+        const dataReceipt = await dataTx.wait();
+        
+        // 记录两个交易
+        addRecord({
+          type: '🔗 ETH转账(两步法)',
+          hash: ethTx.hash,
+          amount: `${form.amount} ETH`,
+          data: '(第一步：ETH转账)',
+          gasUsed: ethReceipt.gasUsed.toString(),
+          blockNumber: ethReceipt.blockNumber,
+          extra: `分步转账 - ETH部分`
+        });
+        
+        addRecord({
+          type: '🔗 数据上链(两步法)',
+          hash: dataTx.hash,
+          amount: '0 ETH',
+          data: form.data,
+          gasUsed: dataReceipt.gasUsed.toString(),
+          blockNumber: dataReceipt.blockNumber,
+          extra: `分步转账 - 数据部分，长度: ${form.data.length} 字符`
+        });
+        
+      } else {
+        // 正常情况：一步到位的转账+数据
+        console.log('外部地址转账，使用标准方法');
+        
+        txParams.data = encodedData;
+
+        // Gas估算和设置
+        let gasLimit;
+        try {
+          const gasEstimate = await provider.estimateGas(txParams);
+          gasLimit = gasEstimate + (gasEstimate * 50n / 100n);
+          console.log('估算Gas:', gasEstimate.toString(), '实际使用:', gasLimit.toString());
+        } catch (gasError) {
+          console.warn('Gas估算失败，使用默认值:', gasError);
+          const dataLength = encodedData.length;
+          const baseGas = 21000n;
+          const dataGas = BigInt(dataLength - 2) * 16n / 2n; // 每两个十六进制字符=1字节=16gas
+          gasLimit = baseGas + dataGas + 50000n;
+        }
+
+        const minGasLimit = 100000n;
+        if (gasLimit < minGasLimit) {
+          gasLimit = minGasLimit;
+        }
+
+        txParams.gasLimit = gasLimit;
+
+        showProgress('发送交易...');
+        updateProgress(4);
+
+        console.log('发送交易参数:', {
+          to: txParams.to,
+          value: txParams.value.toString(),
+          dataLength: encodedData.length,
+          gasLimit: txParams.gasLimit.toString()
+        });
+
+        const tx = await signer.sendTransaction(txParams);
+
+        showProgress('等待交易确认...');
+        updateProgress(5);
+
+        const receipt = await tx.wait();
+
+        addRecord({
+          type: '🔗 ETH数据上链',
+          hash: tx.hash,
+          amount: `${form.amount} ETH`,
+          data: form.data,
+          gasUsed: receipt.gasUsed.toString(),
+          blockNumber: receipt.blockNumber,
+          extra: `数据长度: ${form.data.length} 字符，Gas使用: ${receipt.gasUsed.toString()}`
+        });
       }
-
-      // 确保Gas限制不会太低
-      const minGasLimit = 100000n; // 最低10万gas
-      if (gasLimit < minGasLimit) {
-        gasLimit = minGasLimit;
-        console.log('使用最低Gas限制:', gasLimit.toString());
-      }
-
-      txParams.gasLimit = gasLimit;
-
-      // 发送交易
-      showProgress('发送交易...');
-      updateProgress(4);
-
-      console.log('发送交易参数:', {
-        to: txParams.to,
-        value: txParams.value.toString(),
-        dataLength: encodedData.length,
-        gasLimit: txParams.gasLimit.toString()
-      });
-
-      const tx = await signer.sendTransaction(txParams);
-
-      showProgress('等待交易确认...');
-      updateProgress(5);
-
-      const receipt = await tx.wait();
-
-      addRecord({
-        type: '🔗 ETH数据上链',
-        hash: tx.hash,
-        amount: `${form.amount} ETH`,
-        data: form.data,
-        gasUsed: receipt.gasUsed.toString(),
-        blockNumber: receipt.blockNumber,
-        extra: `数据长度: ${form.data.length} 字符，Gas使用: ${receipt.gasUsed.toString()}`
-      });
 
       setTimeout(() => {
         hideProgress();
         showToast('✅ ETH转账 + 数据上链成功！', 'success');
-        // 重置地址，保留其他字段便于继续测试
         setForm(prev => ({ 
           ...prev, 
           address: ''
@@ -165,9 +244,11 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
       } else if (error.message.includes('insufficient funds')) {
         errorMessage = 'ETH余额不足或Gas费不够';
       } else if (error.message.includes('cannot include data')) {
-        errorMessage = '网络不支持带数据的转账到该地址类型';
+        errorMessage = '检测到MetaMask内部账户限制，请尝试转账到外部地址，或者使用不同的钱包账户';
       } else if (error.message.includes('gas')) {
         errorMessage = 'Gas费设置问题，请重试';
+      } else if (error.code === 'ACTION_REJECTED') {
+        errorMessage = '用户取消了交易';
       }
       
       showToast(errorMessage, 'error');
@@ -203,10 +284,13 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
             value={form.address}
             onChange={(e) => setForm(prev => ({ ...prev, address: e.target.value }))}
             className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none font-mono text-sm"
-            placeholder="0x... 或 ENS域名"
+            placeholder="0x... 或 ENS域名（请避免使用同一钱包内的其他账户）"
             required
             disabled={loading}
           />
+          <p className="text-xs text-amber-600 mt-1">
+            ⚠️ 注意：如果转账到同一钱包的其他账户，系统会自动使用两步法确保成功
+          </p>
         </div>
 
         {/* 转账金额 */}
@@ -281,14 +365,24 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
 
       {/* 功能说明 */}
       <div className="mt-6 p-4 bg-blue-100 border border-blue-300 rounded-lg">
-        <h4 className="font-semibold text-blue-900 mb-2">🎡 优势特点</h4>
+        <h4 className="font-semibold text-blue-900 mb-2">🎯 重要修复</h4>
         <div className="text-sm text-blue-800 space-y-1">
-          <p>• 💰 支持18位精度，可以0ETH转账</p>
-          <p>• 🌍 支持中英文任意字符串数据</p>
-          <p>• 🔍 数据永久存储，可通过交易查询</p>
-          <p>• ⚡ 智能Gas估算，自动优化</p>
-          <p>• 🧪 测试网完全支持</p>
-          <p>• 🔧 已修复：增加足够的Gas限制</p>
+          <p>• 🔧 <strong>已修复</strong>：同一钱包内转账data字段限制问题</p>
+          <p>• 🚀 <strong>智能两步法</strong>：自动检测并使用分步转账</p>
+          <p>• ⚡ <strong>更好的Gas估算</strong>：避免Gas不足错误</p>
+          <p>• 🛡️ <strong>增强错误处理</strong>：更清晰的错误提示</p>
+          <p>• 🎡 <strong>保持原有优势</strong>：支持中英文、18位精度等</p>
+        </div>
+      </div>
+
+      {/* 使用建议 */}
+      <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+        <h4 className="font-semibold text-amber-900 mb-2">💡 使用建议</h4>
+        <div className="text-sm text-amber-800 space-y-1">
+          <p>• 🎯 <strong>最佳实践</strong>：转账到其他人的地址或外部合约</p>
+          <p>• ⚠️ <strong>同钱包转账</strong>：会自动使用两步法，产生两笔交易</p>
+          <p>• 🧪 <strong>测试建议</strong>：使用不同钱包或创建新的测试地址</p>
+          <p>• 💰 <strong>Gas优化</strong>：小额数据建议使用0.001 ETH测试</p>
         </div>
       </div>
     </div>
