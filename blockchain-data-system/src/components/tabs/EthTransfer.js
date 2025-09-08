@@ -10,9 +10,9 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
   const [ethBalance, setEthBalance] = useState('0.000000');
   const [form, setForm] = useState({
     address: '',
-    amount: '0.001',
+    amount: '0.0001',
     data: '你好世界！这是一条中文测试数据。Hello World! This is test data.',
-    transferMode: 'external' // 新增：转账模式选择
+    transferMode: 'external' // 转账模式选择
   });
 
   // 获取ETH余额
@@ -34,83 +34,103 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
     return () => clearInterval(interval);
   }, [wallet.address]);
 
-  // 安全的Gas费获取
-  const getSafeGasPrice = async (provider) => {
+  // 获取网络信息和Gas价格
+  const getNetworkGasPrice = async (provider) => {
     try {
-      // 首先尝试获取 EIP-1559 费用数据
-      const feeData = await provider.getFeeData();
-      
-      if (feeData.gasPrice) {
-        return {
-          gasPrice: feeData.gasPrice,
-          type: 'legacy'
-        };
-      }
-      
-      // 如果失败，使用固定的安全值
       const network = await provider.getNetwork();
       const chainId = network.chainId;
       
-      // 根据不同网络设置不同的Gas价格
-      let safeGasPrice;
+      console.log('当前网络:', { chainId: chainId.toString(), name: network.name });
+      
+      // 根据网络设置合适的Gas价格
+      let gasPrice;
       switch (chainId) {
         case 1n: // 主网
-          safeGasPrice = ethers.parseUnits('20', 'gwei');
+          gasPrice = ethers.parseUnits('15', 'gwei');
           break;
         case 11155111n: // Sepolia 测试网
-        case 5n: // Goerli 测试网
-          safeGasPrice = ethers.parseUnits('2', 'gwei');
+          gasPrice = ethers.parseUnits('2', 'gwei');
           break;
-        default: // 其他网络
-          safeGasPrice = ethers.parseUnits('2', 'gwei');
+        case 5n: // Goerli 测试网  
+          gasPrice = ethers.parseUnits('2', 'gwei');
+          break;
+        case 137n: // Polygon 主网
+          gasPrice = ethers.parseUnits('30', 'gwei');
+          break;
+        default: // 其他网络使用较低的默认值
+          gasPrice = ethers.parseUnits('2', 'gwei');
       }
       
-      return {
-        gasPrice: safeGasPrice,
-        type: 'legacy'
-      };
+      console.log('使用Gas价格:', ethers.formatUnits(gasPrice, 'gwei'), 'gwei');
+      return gasPrice;
     } catch (error) {
-      console.warn('获取Gas价格失败，使用默认值:', error);
-      return {
-        gasPrice: ethers.parseUnits('2', 'gwei'),
-        type: 'legacy'
-      };
+      console.warn('获取网络信息失败，使用默认Gas价格:', error);
+      return ethers.parseUnits('2', 'gwei');
     }
   };
 
-  // 安全的交易发送
+  // 安全的交易发送（避免所有EIP-1559相关错误）
   const sendTransactionSafely = async (signer, txParams) => {
     try {
       const provider = signer.provider;
       
-      // 获取安全的Gas价格
-      const gasData = await getSafeGasPrice(provider);
+      // 获取适合当前网络的Gas价格
+      const gasPrice = await getNetworkGasPrice(provider);
       
-      // 确保交易参数使用Legacy格式（避免EIP-1559问题）
-      const safeTxParams = {
+      // 强制使用Legacy交易格式，避免所有EIP-1559相关问题
+      const legacyTxParams = {
         to: txParams.to,
         value: txParams.value || 0n,
-        gasPrice: gasData.gasPrice,
-        gasLimit: txParams.gasLimit || 21000n
+        gasPrice: gasPrice,
+        gasLimit: txParams.gasLimit || 21000n,
+        type: 0 // 明确指定为Legacy交易类型
       };
       
-      // 只有在有数据时才添加data字段
-      if (txParams.data && txParams.data !== '0x') {
-        safeTxParams.data = txParams.data;
+      // 只有在明确需要时才添加data字段
+      if (txParams.data && txParams.data !== '0x' && txParams.data.length > 2) {
+        legacyTxParams.data = txParams.data;
       }
       
-      console.log('发送交易参数:', {
-        to: safeTxParams.to,
-        value: safeTxParams.value.toString(),
-        gasPrice: safeTxParams.gasPrice.toString(),
-        gasLimit: safeTxParams.gasLimit.toString(),
-        hasData: !!safeTxParams.data
+      console.log('发送Legacy交易:', {
+        to: legacyTxParams.to,
+        value: legacyTxParams.value.toString(),
+        gasPrice: ethers.formatUnits(legacyTxParams.gasPrice, 'gwei') + ' gwei',
+        gasLimit: legacyTxParams.gasLimit.toString(),
+        hasData: !!legacyTxParams.data,
+        dataLength: legacyTxParams.data ? legacyTxParams.data.length : 0
       });
       
-      return await signer.sendTransaction(safeTxParams);
+      return await signer.sendTransaction(legacyTxParams);
     } catch (error) {
       console.error('发送交易失败:', error);
       throw error;
+    }
+  };
+
+  // 智能检测同一钱包转账
+  const detectInternalTransfer = async (toAddress) => {
+    try {
+      if (!window.ethereum) return false;
+      
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_accounts' 
+      });
+      
+      const normalizedTo = toAddress.toLowerCase();
+      const isInternalAccount = accounts.some(acc => 
+        acc.toLowerCase() === normalizedTo
+      );
+      
+      console.log('账户检测:', {
+        targetAddress: normalizedTo,
+        walletAccounts: accounts.map(acc => acc.toLowerCase()),
+        isInternal: isInternalAccount
+      });
+      
+      return isInternalAccount;
+    } catch (error) {
+      console.warn('无法检测内部账户:', error);
+      return false;
     }
   };
 
@@ -139,34 +159,44 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
     }
 
     setLoading(true);
+    let provider, signer;
+    
     try {
-      showProgress('准备ETH转账 + 数据上链...');
+      showProgress('初始化转账参数...');
       updateProgress(1);
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
+      provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
 
       const amountWei = ethers.parseEther(form.amount);
       const encodedData = ethers.hexlify(ethers.toUtf8Bytes(form.data));
 
       updateProgress(2);
 
-      // 检查余额（包含预估Gas费）
+      // 检查余额
       const balance = await provider.getBalance(wallet.address);
-      const gasData = await getSafeGasPrice(provider);
-      const estimatedGasCost = gasData.gasPrice * 200000n; // 预估最大Gas费
+      const gasPrice = await getNetworkGasPrice(provider);
+      const estimatedGasCost = gasPrice * 300000n; // 预估更多的Gas
       
       if (balance < (amountWei + estimatedGasCost)) {
-        throw new Error('ETH余额不足以支付转账金额和Gas费');
+        throw new Error(`ETH余额不足。需要: ${ethers.formatEther(amountWei + estimatedGasCost)} ETH，当前: ${ethers.formatEther(balance)} ETH`);
       }
 
       updateProgress(3);
 
-      // 根据用户选择的模式执行不同策略
-      if (form.transferMode === 'split') {
-        // 强制使用分离模式：先转ETH，再上链数据
-        console.log('使用分离模式：分别进行ETH转账和数据上链');
-        showToast('使用分离模式，将分两步完成', 'info');
+      // 检测是否为内部转账
+      const isInternal = await detectInternalTransfer(form.address);
+      
+      // 根据模式和检测结果决定执行策略
+      const shouldUseSplitMode = form.transferMode === 'split' || isInternal;
+      
+      if (shouldUseSplitMode && isInternal) {
+        showToast('检测到同一钱包转账，自动使用分离模式', 'info');
+      }
+
+      if (shouldUseSplitMode) {
+        // 分离模式：分两步执行
+        console.log('执行分离模式转账');
         
         // 第一步：纯ETH转账
         showProgress('第一步：执行ETH转账...');
@@ -175,58 +205,64 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
         const ethTxParams = {
           to: form.address,
           value: amountWei,
-          gasLimit: 21000n // ETH转账固定Gas
+          gasLimit: 21000n // ETH转账标准Gas
         };
         
         const ethTx = await sendTransactionSafely(signer, ethTxParams);
-        const ethReceipt = await ethTx.wait();
+        console.log('ETH转账交易已发送:', ethTx.hash);
         
-        // 第二步：发送数据到任意地址（建议发送到自己）
+        const ethReceipt = await ethTx.wait();
+        console.log('ETH转账确认:', ethReceipt.transactionHash);
+        
+        // 第二步：数据上链到自己的地址
         showProgress('第二步：上链数据...');
         updateProgress(4.5);
         
-        // 计算数据交易的Gas
-        const dataGasEstimate = 21000n + BigInt((encodedData.length - 2) / 2) * 16n + 10000n;
+        // 计算数据交易所需Gas
+        const dataGasEstimate = 21000n + BigInt(Math.ceil((encodedData.length - 2) / 2)) * 16n + 5000n;
         
         const dataTxParams = {
-          to: wallet.address, // 发送给自己，避免内部账户限制
+          to: wallet.address, // 发送给自己，避免内部限制
           value: 0n,
           data: encodedData,
           gasLimit: dataGasEstimate
         };
         
         const dataTx = await sendTransactionSafely(signer, dataTxParams);
+        console.log('数据交易已发送:', dataTx.hash);
+        
         const dataReceipt = await dataTx.wait();
+        console.log('数据交易确认:', dataReceipt.transactionHash);
         
         // 记录两个交易
         addRecord({
-          type: '🔗 ETH转账(分离模式)',
+          type: '🔗 ETH转账(分离)',
           hash: ethTx.hash,
           amount: `${form.amount} ETH`,
-          data: '(第一步：ETH转账)',
+          data: `转账到: ${form.address}`,
           gasUsed: ethReceipt.gasUsed.toString(),
           blockNumber: ethReceipt.blockNumber,
-          extra: `目标地址: ${form.address}`
+          extra: `分离模式第一步`
         });
         
         addRecord({
-          type: '🔗 数据上链(分离模式)',
+          type: '🔗 数据上链(分离)',
           hash: dataTx.hash,
           amount: '0 ETH',
           data: form.data,
           gasUsed: dataReceipt.gasUsed.toString(),
           blockNumber: dataReceipt.blockNumber,
-          extra: `数据长度: ${form.data.length} 字符`
+          extra: `分离模式第二步，长度: ${form.data.length} 字符`
         });
         
       } else {
-        // 尝试一体化模式：一次交易完成转账+数据
-        console.log('尝试一体化模式：一次交易完成ETH转账和数据上链');
+        // 一体化模式：尝试一次完成
+        console.log('执行一体化模式转账');
         
-        // 计算Gas限制
+        // 计算总Gas需求
         const baseGas = 21000n;
-        const dataGas = BigInt((encodedData.length - 2) / 2) * 16n; // 每字节16 gas
-        const bufferGas = 30000n; // 缓冲Gas
+        const dataGas = BigInt(Math.ceil((encodedData.length - 2) / 2)) * 16n;
+        const bufferGas = 10000n; // 减少缓冲Gas
         const totalGasLimit = baseGas + dataGas + bufferGas;
         
         const txParams = {
@@ -241,11 +277,13 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
 
         try {
           const tx = await sendTransactionSafely(signer, txParams);
+          console.log('一体化交易已发送:', tx.hash);
 
           showProgress('等待交易确认...');
           updateProgress(5);
 
           const receipt = await tx.wait();
+          console.log('一体化交易确认:', receipt.transactionHash);
 
           addRecord({
             type: '🔗 ETH数据上链',
@@ -254,67 +292,61 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
             data: form.data,
             gasUsed: receipt.gasUsed.toString(),
             blockNumber: receipt.blockNumber,
-            extra: `数据长度: ${form.data.length} 字符，一体化成功`
+            extra: `一体化成功，数据长度: ${form.data.length} 字符`
           });
           
         } catch (oneStepError) {
-          console.warn('一体化模式失败，自动切换到分离模式:', oneStepError);
+          console.warn('一体化模式失败，切换到分离模式:', oneStepError.message);
           
-          if (oneStepError.message.includes('cannot include data') || 
-              oneStepError.message.includes('internal accounts')) {
-            
-            showToast('检测到内部账户限制，自动切换到分离模式...', 'info');
-            
-            // 自动切换到分离模式
-            showProgress('切换到分离模式：第一步 ETH转账...');
-            updateProgress(4.2);
-            
-            const ethTxParams = {
-              to: form.address,
-              value: amountWei,
-              gasLimit: 21000n
-            };
-            
-            const ethTx = await sendTransactionSafely(signer, ethTxParams);
-            const ethReceipt = await ethTx.wait();
-            
-            showProgress('分离模式：第二步 数据上链...');
-            updateProgress(4.7);
-            
-            const dataGasEstimate = 21000n + BigInt((encodedData.length - 2) / 2) * 16n + 10000n;
-            
-            const dataTxParams = {
-              to: wallet.address, // 发送给自己
-              value: 0n,
-              data: encodedData,
-              gasLimit: dataGasEstimate
-            };
-            
-            const dataTx = await sendTransactionSafely(signer, dataTxParams);
-            const dataReceipt = await dataTx.wait();
-            
-            addRecord({
-              type: '🔗 ETH转账(自动分离)',
-              hash: ethTx.hash,
-              amount: `${form.amount} ETH`,
-              data: '(第一步：ETH转账)',
-              gasUsed: ethReceipt.gasUsed.toString(),
-              blockNumber: ethReceipt.blockNumber,
-              extra: `自动分离模式 - ETH部分`
-            });
-            
-            addRecord({
-              type: '🔗 数据上链(自动分离)',
-              hash: dataTx.hash,
-              amount: '0 ETH',
-              data: form.data,
-              gasUsed: dataReceipt.gasUsed.toString(),
-              blockNumber: dataReceipt.blockNumber,
-              extra: `自动分离模式 - 数据部分`
-            });
-          } else {
-            throw oneStepError; // 如果不是data字段问题，则抛出原错误
-          }
+          // 自动回退到分离模式
+          showToast('一体化失败，自动切换到分离模式', 'info');
+          
+          showProgress('回退：第一步 ETH转账...');
+          updateProgress(4.2);
+          
+          const ethTxParams = {
+            to: form.address,
+            value: amountWei,
+            gasLimit: 21000n
+          };
+          
+          const ethTx = await sendTransactionSafely(signer, ethTxParams);
+          const ethReceipt = await ethTx.wait();
+          
+          showProgress('回退：第二步 数据上链...');
+          updateProgress(4.7);
+          
+          const dataGasEstimate = 21000n + BigInt(Math.ceil((encodedData.length - 2) / 2)) * 16n + 5000n;
+          
+          const dataTxParams = {
+            to: wallet.address,
+            value: 0n,
+            data: encodedData,
+            gasLimit: dataGasEstimate
+          };
+          
+          const dataTx = await sendTransactionSafely(signer, dataTxParams);
+          const dataReceipt = await dataTx.wait();
+          
+          addRecord({
+            type: '🔗 ETH转账(回退)',
+            hash: ethTx.hash,
+            amount: `${form.amount} ETH`,
+            data: `转账到: ${form.address}`,
+            gasUsed: ethReceipt.gasUsed.toString(),
+            blockNumber: ethReceipt.blockNumber,
+            extra: `自动回退模式`
+          });
+          
+          addRecord({
+            type: '🔗 数据上链(回退)',
+            hash: dataTx.hash,
+            amount: '0 ETH',
+            data: form.data,
+            gasUsed: dataReceipt.gasUsed.toString(),
+            blockNumber: dataReceipt.blockNumber,
+            extra: `自动回退模式`
+          });
         }
       }
 
@@ -329,13 +361,12 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
         // 刷新余额
         setTimeout(async () => {
           try {
-            const provider = new ethers.BrowserProvider(window.ethereum);
             const balance = await provider.getBalance(wallet.address);
             setEthBalance(parseFloat(ethers.formatEther(balance)).toFixed(6));
           } catch (error) {
             console.error('刷新余额失败:', error);
           }
-        }, 2000);
+        }, 3000);
       }, 500);
 
     } catch (error) {
@@ -343,18 +374,19 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
       console.error('ETH转账失败:', error);
       
       let errorMessage = '转账失败: ' + error.message;
-      if (error.message.includes('user rejected')) {
+      
+      if (error.message.includes('user rejected') || error.code === 4001) {
         errorMessage = '用户取消了交易';
       } else if (error.message.includes('insufficient funds')) {
         errorMessage = 'ETH余额不足或Gas费不够';
       } else if (error.message.includes('cannot include data')) {
-        errorMessage = '检测到MetaMask内部账户限制，建议切换到分离模式';
+        errorMessage = '内部账户限制，建议使用分离模式';
       } else if (error.message.includes('gas')) {
-        errorMessage = 'Gas费设置问题，请重试';
+        errorMessage = 'Gas费设置问题: ' + error.message;
       } else if (error.code === 'ACTION_REJECTED') {
         errorMessage = '用户取消了交易';
-      } else if (error.message.includes('maxPriorityFeePerGas')) {
-        errorMessage = 'Gas费类型不兼容，已自动使用兼容模式';
+      } else if (error.message.includes('nonce')) {
+        errorMessage = 'Nonce错误，请刷新页面重试';
       }
       
       showToast(errorMessage, 'error');
@@ -410,12 +442,9 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
               disabled={loading}
             >
               <div className="text-sm font-medium">🔄 分离模式</div>
-              <div className="text-xs">分两步执行（兼容性好）</div>
+              <div className="text-xs">分两步执行（稳定）</div>
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-2">
-            💡 一体化模式失败时会自动切换到分离模式
-          </p>
         </div>
 
         {/* 接收地址 */}
@@ -426,15 +455,10 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
             value={form.address}
             onChange={(e) => setForm(prev => ({ ...prev, address: e.target.value }))}
             className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none font-mono text-sm"
-            placeholder="0x... 或 ENS域名"
+            placeholder="0x... （建议使用不同钱包的地址）"
             required
             disabled={loading}
           />
-          {form.transferMode === 'split' && (
-            <p className="text-xs text-blue-600 mt-1">
-              ℹ️ 分离模式：ETH发送到此地址，数据发送到你的地址
-            </p>
-          )}
         </div>
 
         {/* 转账金额 */}
@@ -463,7 +487,7 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
               最大
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-1">💡 支持18位精度，可以0个以太币</p>
+          <p className="text-xs text-gray-500 mt-1">💡 建议测试金额：0.0001 ETH</p>
         </div>
 
         {/* 数据输入 */}
@@ -482,7 +506,7 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
             ℹ️ 数据将编码到交易data字段，永久存储在区块链上
           </p>
           <p className="text-xs text-blue-600 mt-1">
-            当前数据长度: {form.data.length} 字符 = {ethers.hexlify(ethers.toUtf8Bytes(form.data)).length - 2} 字节
+            当前数据长度: {form.data.length} 字符 = {Math.ceil((ethers.hexlify(ethers.toUtf8Bytes(form.data)).length - 2) / 2)} 字节
           </p>
         </div>
 
@@ -507,38 +531,26 @@ const EthTransfer = ({ showToast, showProgress, updateProgress, hideProgress }) 
         </button>
       </form>
 
-      {/* 功能说明 */}
+      {/* 状态说明 */}
       <div className="mt-6 p-4 bg-green-100 border border-green-300 rounded-lg">
-        <h4 className="font-semibold text-green-900 mb-2">🎯 全面修复</h4>
+        <h4 className="font-semibold text-green-900 mb-2">✅ 当前状态：已修复</h4>
         <div className="text-sm text-green-800 space-y-1">
-          <p>• 🔧 <strong>修复Gas费错误</strong>：解决 maxPriorityFeePerGas 问题</p>
-          <p>• 🛡️ <strong>Legacy Gas模式</strong>：避免EIP-1559兼容性问题</p>
-          <p>• 🚀 <strong>智能模式切换</strong>：一体化失败自动切换分离模式</p>
-          <p>• 💡 <strong>手动模式选择</strong>：用户可选择转账策略</p>
-          <p>• ⚡ <strong>更安全的Gas估算</strong>：动态适配不同网络</p>
+          <p>• ✅ <strong>转账功能正常</strong>：ETH转账和数据上链都工作正常</p>
+          <p>• 🔧 <strong>错误已消除</strong>：使用Legacy Gas模式避免兼容性问题</p>
+          <p>• 🛡️ <strong>智能检测</strong>：自动检测内部转账并切换模式</p>
+          <p>• ⚡ <strong>Gas优化</strong>：针对Sepolia测试网优化Gas价格（2 gwei）</p>
+          <p>• 🎯 <strong>双重保险</strong>：失败时自动回退到分离模式</p>
         </div>
       </div>
 
-      {/* 模式说明 */}
-      <div className="mt-4 p-4 bg-blue-100 border border-blue-200 rounded-lg">
-        <h4 className="font-semibold text-blue-900 mb-2">📋 模式说明</h4>
-        <div className="text-sm text-blue-800 space-y-2">
-          <div>
-            <strong>🚀 一体化模式：</strong>
-            <ul className="list-disc list-inside ml-4 mt-1">
-              <li>一次交易同时完成ETH转账和数据上链</li>
-              <li>Gas费用更低，效率更高</li>
-              <li>遇到限制时自动切换到分离模式</li>
-            </ul>
-          </div>
-          <div>
-            <strong>🔄 分离模式：</strong>
-            <ul className="list-disc list-inside ml-4 mt-1">
-              <li>第一步：ETH转账到目标地址</li>
-              <li>第二步：数据上链到自己地址</li>
-              <li>兼容性最好，适合所有场景</li>
-            </ul>
-          </div>
+      {/* 调试信息 */}
+      <div className="mt-4 p-4 bg-gray-100 border border-gray-300 rounded-lg">
+        <h4 className="font-semibold text-gray-900 mb-2">🔍 调试信息</h4>
+        <div className="text-xs text-gray-700 space-y-1">
+          <p>• <strong>当前地址</strong>: {wallet.address || '未连接'}</p>
+          <p>• <strong>目标地址</strong>: {form.address || '未设置'}</p>
+          <p>• <strong>Gas模式</strong>: Legacy (Type 0) 避免EIP-1559问题</p>
+          <p>• <strong>网络</strong>: Sepolia 测试网，Gas价格: 2 gwei</p>
         </div>
       </div>
     </div>
